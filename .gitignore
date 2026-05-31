@@ -32,9 +32,6 @@ yarn-error.log*
 # Coverage
 coverage/
 
-# Prisma
-backend/prisma/migrations/
-
 # Misc
 *.pem
 .cache/
