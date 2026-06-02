@@ -26,7 +26,7 @@ export default function MedicalRecordsPage() {
   const [prescriptionForm, setPrescriptionForm] = useState({
     medicationName: '', dosage: '', frequency: '', duration: '', instructions: '',
   });
-  const { isAdmin, isDoctor, user } = useAuth();
+  const { isAdmin, isDoctor } = useAuth();
   const canCreate = isAdmin || isDoctor;
 
   const fetchRecords = () => {
@@ -52,11 +52,8 @@ export default function MedicalRecordsPage() {
         setPatients(patRes.data);
         setDoctors(docRes.data);
         // For doctors, auto-set their doctor ID
-        if (isDoctor) {
-          const myDoctor = docRes.data.find(d => d.userId === user?.id);
-          if (myDoctor) {
-            setForm(prev => ({ ...prev, doctorId: myDoctor.id.toString() }));
-          }
+        if (isDoctor && docRes.data.length > 0) {
+          setForm(prev => ({ ...prev, doctorId: docRes.data[0].id.toString() }));
         }
       })
       .catch(() => {});

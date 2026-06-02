@@ -115,20 +115,22 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Revenue Card */}
-      <div className="card p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-500">Total Revenue</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">
-              ${(stats?.totalRevenue || 0).toLocaleString()}
-            </p>
-          </div>
-          <div className="p-3 rounded-lg bg-emerald-50">
-            <DollarSign className="w-6 h-6 text-emerald-600" />
+      {/* Revenue Card - hidden for doctors since they can't access invoices */}
+      {!isDoctor && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Total Revenue</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">
+                ${(stats?.totalRevenue || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-emerald-50">
+              <DollarSign className="w-6 h-6 text-emerald-600" />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Recent and Upcoming Appointments */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
