@@ -1,4 +1,6 @@
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -51,6 +53,21 @@ app.use('/api/dashboard', dashboardRoutes);
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Serve built frontend in production
+const frontendDist = path.join(__dirname, '../../frontend/dist');
+console.log('Frontend dist path:', frontendDist);
+console.log('Frontend dist exists:', fs.existsSync(frontendDist));
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  // SPA catch-all - serve index.html for any route that isn't an API call
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
 
 // Error handling
 app.use(notFound);
