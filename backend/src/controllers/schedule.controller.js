@@ -1,7 +1,17 @@
 exports.getByDoctor = async (req, res, next) => {
   try {
+    const doctorId = parseInt(req.params.doctorId);
+
+    // Doctors can only view their own schedule
+    if (req.user.role === 'DOCTOR') {
+      const doctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (!doctor || doctor.id !== doctorId) {
+        return res.status(403).json({ message: 'You can only view your own schedule.' });
+      }
+    }
+
     const schedules = await req.prisma.doctorSchedule.findMany({
-      where: { doctorId: parseInt(req.params.doctorId) },
+      where: { doctorId },
       orderBy: { dayOfWeek: 'asc' },
     });
     res.json(schedules);
@@ -14,6 +24,14 @@ exports.upsert = async (req, res, next) => {
   try {
     const { schedules } = req.body;
     const doctorId = parseInt(req.params.doctorId);
+
+    // Doctors can only update their own schedule
+    if (req.user.role === 'DOCTOR') {
+      const doctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (!doctor || doctor.id !== doctorId) {
+        return res.status(403).json({ message: 'You can only update your own schedule.' });
+      }
+    }
 
     // Delete existing schedules for this doctor
     await req.prisma.doctorSchedule.deleteMany({

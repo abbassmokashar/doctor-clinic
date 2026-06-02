@@ -26,7 +26,7 @@ export default function MedicalRecordsPage() {
   const [prescriptionForm, setPrescriptionForm] = useState({
     medicationName: '', dosage: '', frequency: '', duration: '', instructions: '',
   });
-  const { isAdmin, isDoctor } = useAuth();
+  const { isAdmin, isDoctor, user } = useAuth();
   const canCreate = isAdmin || isDoctor;
 
   const fetchRecords = () => {
@@ -51,6 +51,13 @@ export default function MedicalRecordsPage() {
       .then(([patRes, docRes]) => {
         setPatients(patRes.data);
         setDoctors(docRes.data);
+        // For doctors, auto-set their doctor ID
+        if (isDoctor) {
+          const myDoctor = docRes.data.find(d => d.userId === user?.id);
+          if (myDoctor) {
+            setForm(prev => ({ ...prev, doctorId: myDoctor.id.toString() }));
+          }
+        }
       })
       .catch(() => {});
   }, []);
@@ -212,10 +219,16 @@ export default function MedicalRecordsPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="label">Doctor *</label>
-                <select className="input" value={form.doctorId} onChange={(e) => setForm({...form, doctorId: e.target.value})} required>
-                  <option value="">Select doctor...</option>
-                  {doctors.map((d) => <option key={d.id} value={d.id}>{d.user?.name}</option>)}
-                </select>
+                {isDoctor ? (
+                  <div className="input bg-gray-50 text-gray-700">
+                    {doctors.find(d => d.id.toString() === form.doctorId)?.user?.name || 'You'}
+                  </div>
+                ) : (
+                  <select className="input" value={form.doctorId} onChange={(e) => setForm({...form, doctorId: e.target.value})} required>
+                    <option value="">Select doctor...</option>
+                    {doctors.map((d) => <option key={d.id} value={d.id}>{d.user?.name}</option>)}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="label">Diagnosis *</label>

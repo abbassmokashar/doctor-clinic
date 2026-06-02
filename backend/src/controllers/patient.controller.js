@@ -12,12 +12,28 @@ exports.getAll = async (req, res, next) => {
         }
       : {};
 
+    // Doctors can only see patients they have treated
+    if (req.user.role === 'DOCTOR') {
+      const doctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (doctor) {
+        const treatedPatientIds = await req.prisma.appointment.findMany({
+          where: { doctorId: doctor.id },
+          select: { patientId: true },
+          distinct: ['patientId'],
+        });
+        where.id = { in: treatedPatientIds.map((a) => a.patientId) };
+      } else {
+        return res.json([]);
+      }
+    }
+
     const patients = await req.prisma.patient.findMany({
       where,
       include: {
         _count: { select: { appointments: true, medicalRecords: true, invoices: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
     res.json(patients);
   } catch (error) {

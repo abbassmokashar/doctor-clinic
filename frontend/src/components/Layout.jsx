@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -17,16 +17,16 @@ import {
   ChevronDown,
 } from 'lucide-react';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/doctors', icon: Stethoscope, label: 'Doctors' },
-  { to: '/patients', icon: Users, label: 'Patients' },
-  { to: '/appointments', icon: Calendar, label: 'Appointments' },
-  { to: '/schedules', icon: Clock, label: 'Schedules' },
-  { to: '/medical-records', icon: FileText, label: 'Medical Records' },
-  { to: '/medications', icon: Pill, label: 'Medications' },
-  { to: '/departments', icon: Building2, label: 'Departments' },
-  { to: '/invoices', icon: Receipt, label: 'Invoices' },
+const allNavItems = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true, roles: ['ADMIN', 'DOCTOR', 'RECEPTIONIST'] },
+  { to: '/doctors', icon: Stethoscope, label: 'Doctors', roles: ['ADMIN', 'RECEPTIONIST'] },
+  { to: '/patients', icon: Users, label: 'Patients', roles: ['ADMIN', 'DOCTOR', 'RECEPTIONIST'] },
+  { to: '/appointments', icon: Calendar, label: 'Appointments', roles: ['ADMIN', 'DOCTOR', 'RECEPTIONIST'] },
+  { to: '/schedules', icon: Clock, label: 'Schedules', roles: ['ADMIN', 'DOCTOR', 'RECEPTIONIST'] },
+  { to: '/medical-records', icon: FileText, label: 'Medical Records', roles: ['ADMIN', 'DOCTOR', 'RECEPTIONIST'] },
+  { to: '/medications', icon: Pill, label: 'Medications', roles: ['ADMIN'] },
+  { to: '/departments', icon: Building2, label: 'Departments', roles: ['ADMIN'] },
+  { to: '/invoices', icon: Receipt, label: 'Invoices', roles: ['ADMIN', 'RECEPTIONIST'] },
 ];
 
 export default function Layout() {
@@ -34,6 +34,11 @@ export default function Layout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  const navItems = useMemo(() => {
+    if (!user) return [];
+    return allNavItems.filter((item) => item.roles.includes(user.role));
+  }, [user]);
 
   const handleLogout = () => {
     logout();

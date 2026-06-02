@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const { isAdmin, isDoctor, isReceptionist } = useAuth();
+  const canManageDoctors = isAdmin || isReceptionist;
 
   useEffect(() => {
     dashboardAPI
@@ -37,16 +38,23 @@ export default function DashboardPage() {
   }
 
   const statCards = [
-    {
+    ...(!isDoctor ? [{
       label: 'Total Doctors',
       value: stats?.totalDoctors || 0,
       icon: Stethoscope,
       color: 'bg-blue-500',
       bg: 'bg-blue-50',
       link: '/doctors',
-    },
+    }] : [{
+      label: 'Your Profile',
+      value: 1,
+      icon: Stethoscope,
+      color: 'bg-blue-500',
+      bg: 'bg-blue-50',
+      link: '/doctors',
+    }]),
     {
-      label: 'Total Patients',
+      label: isDoctor ? 'My Patients' : 'Total Patients',
       value: stats?.totalPatients || 0,
       icon: Users,
       color: 'bg-emerald-500',
@@ -61,14 +69,14 @@ export default function DashboardPage() {
       bg: 'bg-amber-50',
       link: '/appointments',
     },
-    {
+    ...(!isDoctor ? [{
       label: 'Pending Invoices',
       value: stats?.pendingInvoices || 0,
       icon: DollarSign,
       color: 'bg-rose-500',
       bg: 'bg-rose-50',
       link: '/invoices',
-    },
+    }] : []),
   ];
 
   const getStatusBadge = (status) => {

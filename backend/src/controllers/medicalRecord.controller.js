@@ -36,7 +36,14 @@ exports.getById = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const { patientId, doctorId, appointmentId, diagnosis, symptoms, notes } = req.body;
+    let { patientId, doctorId, appointmentId, diagnosis, symptoms, notes } = req.body;
+
+    // If user is a doctor, auto-set to their doctor profile
+    if (req.user.role === 'DOCTOR') {
+      const doctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (!doctor) return res.status(400).json({ message: 'Doctor profile not found.' });
+      doctorId = doctor.id;
+    }
 
     const record = await req.prisma.medicalRecord.create({
       data: {

@@ -1,6 +1,17 @@
+const bcrypt = require('bcryptjs');
+
 exports.getAll = async (req, res, next) => {
   try {
+    const where = {};
+    // Doctors can only see themselves
+    if (req.user.role === 'DOCTOR') {
+      const doctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (!doctor) return res.json([]);
+      where.id = doctor.id;
+    }
+
     const doctors = await req.prisma.doctor.findMany({
+      where,
       include: {
         user: { select: { id: true, email: true, name: true, phone: true } },
         departments: { include: { department: true } },
@@ -16,8 +27,18 @@ exports.getAll = async (req, res, next) => {
 
 exports.getById = async (req, res, next) => {
   try {
+    const doctorId = parseInt(req.params.id);
+
+    // Doctors can only view their own profile
+    if (req.user.role === 'DOCTOR') {
+      const myDoctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (!myDoctor || myDoctor.id !== doctorId) {
+        return res.status(403).json({ message: 'You can only view your own profile.' });
+      }
+    }
+
     const doctor = await req.prisma.doctor.findUnique({
-      where: { id: parseInt(req.params.id) },
+      where: { id: doctorId },
       include: {
         user: { select: { id: true, email: true, name: true, phone: true } },
         departments: { include: { department: true } },
@@ -35,31 +56,48 @@ exports.getById = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const { userId, specialization, licenseNumber, bio, consultationFee } = req.body;
+    const { name, email, password, specialization, licenseNumber, bio, consultationFee } = req.body;
 
-    // Verify user exists
-    const user = await req.prisma.user.findUnique({
-      where: { id: parseInt(userId) },
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: 'User not found.' });
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required.' });
     }
 
-    const doctor = await req.prisma.doctor.create({
-      data: {
-        userId: parseInt(userId),
-        specialization,
-        licenseNumber,
-        bio,
-        consultationFee: consultationFee ? parseFloat(consultationFee) : null,
-      },
-      include: {
-        user: { select: { id: true, email: true, name: true } },
-      },
+    // Check if email already exists
+    const existingUser = await req.prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already registered.' });
+    }
+
+    // Create user and doctor in a transaction
+    const result = await req.prisma.$transaction(async (tx) => {
+      const hashedPassword = await bcrypt.hash(password, 12);
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+          role: 'DOCTOR',
+          phone: req.body.phone || null,
+        },
+      });
+
+      const doctor = await tx.doctor.create({
+        data: {
+          userId: user.id,
+          specialization,
+          licenseNumber,
+          bio,
+          consultationFee: consultationFee ? parseFloat(consultationFee) : null,
+        },
+        include: {
+          user: { select: { id: true, email: true, name: true } },
+        },
+      });
+
+      return doctor;
     });
 
-    res.status(201).json(doctor);
+    res.status(201).json(result);
   } catch (error) {
     next(error);
   }
@@ -67,10 +105,19 @@ exports.create = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
+    const doctorId = parseInt(req.params.id);
     const { specialization, licenseNumber, bio, consultationFee, isAvailable } = req.body;
 
+    // Doctors can only update their own profile
+    if (req.user.role === 'DOCTOR') {
+      const myDoctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (!myDoctor || myDoctor.id !== doctorId) {
+        return res.status(403).json({ message: 'You can only update your own profile.' });
+      }
+    }
+
     const doctor = await req.prisma.doctor.update({
-      where: { id: parseInt(req.params.id) },
+      where: { id: doctorId },
       data: { specialization, licenseNumber, bio, consultationFee, isAvailable },
       include: {
         user: { select: { id: true, email: true, name: true } },
@@ -96,12 +143,23 @@ exports.remove = async (req, res, next) => {
 
 exports.getAppointments = async (req, res, next) => {
   try {
+    const doctorId = parseInt(req.params.id);
+
+    // Doctors can only view their own appointments
+    if (req.user.role === 'DOCTOR') {
+      const doctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (!doctor || doctor.id !== doctorId) {
+        return res.status(403).json({ message: 'You can only view your own appointments.' });
+      }
+    }
+
     const appointments = await req.prisma.appointment.findMany({
-      where: { doctorId: parseInt(req.params.id) },
+      where: { doctorId },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
       },
       orderBy: { dateTime: 'desc' },
+      take: 50,
     });
     res.json(appointments);
   } catch (error) {

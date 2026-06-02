@@ -60,7 +60,7 @@ export default function PatientDetailPage() {
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-gray-900">{patient.firstName} {patient.lastName}</h1>
             <p className="text-gray-500">
-              {patient.gender && `${patient.gender.charAt(0) + patient.gender.slice(1).toLowerCase()}`}
+              {patient.gender && (patient.gender === 'PREFER_NOT_TO_SAY' ? 'Prefer not to say' : patient.gender.charAt(0) + patient.gender.slice(1).toLowerCase().replace(/_/g, ' '))}
               {patient.dateOfBirth && ` • ${new Date(patient.dateOfBirth).toLocaleDateString()}`}
             </p>
           </div>            {patient.bloodType && (

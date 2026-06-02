@@ -13,7 +13,7 @@ export default function SchedulesPage() {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const { isAdmin, isDoctor } = useAuth();
+  const { isAdmin, isDoctor, user } = useAuth();
   const canEdit = isAdmin || isDoctor;
 
   const [editSchedules, setEditSchedules] = useState(
@@ -31,8 +31,13 @@ export default function SchedulesPage() {
       .getAll()
       .then((res) => {
         setDoctors(res.data);
+        // For doctors, auto-select their own profile
         if (res.data.length > 0) {
-          setSelectedDoctor(res.data[0].id);
+          if (isDoctor) {
+            setSelectedDoctor(res.data[0]?.id || null);
+          } else {
+            setSelectedDoctor(res.data[0]?.id || null);
+          }
         }
       })
       .catch(() => toast.error('Failed to load doctors'))
@@ -101,21 +106,29 @@ export default function SchedulesPage() {
         </div>
       </div>
 
-      {/* Doctor selector */}
+      {/* Doctor selector - hidden for doctors since they only see their own */}
       <div className="max-w-md">
-        <label className="label">Select Doctor</label>
-        <select
-          className="input"
-          value={selectedDoctor || ''}
-          onChange={(e) => setSelectedDoctor(parseInt(e.target.value))}
-        >
-          <option value="">Choose a doctor...</option>
-          {doctors.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.user?.name} - {d.specialization}
-            </option>
-          ))}
-        </select>
+        <label className="label">
+          {isDoctor ? 'Your Schedule' : 'Select Doctor'}
+        </label>
+        {isDoctor ? (
+          <div className="input bg-gray-50 text-gray-700 font-medium">
+            {doctors[0]?.user?.name || 'Loading...'} - {doctors[0]?.specialization || ''}
+          </div>
+        ) : (
+          <select
+            className="input"
+            value={selectedDoctor || ''}
+            onChange={(e) => setSelectedDoctor(parseInt(e.target.value))}
+          >
+            <option value="">Choose a doctor...</option>
+            {doctors.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.user?.name} - {d.specialization}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {selectedDoctor && (

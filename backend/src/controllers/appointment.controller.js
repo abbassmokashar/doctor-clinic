@@ -13,6 +13,16 @@ exports.getAll = async (req, res, next) => {
       where.dateTime = { gte: start, lte: end };
     }
 
+    // Doctors can only see their own appointments
+    if (req.user.role === 'DOCTOR') {
+      const doctor = await req.prisma.doctor.findUnique({ where: { userId: req.user.id } });
+      if (doctor) {
+        where.doctorId = doctor.id;
+      } else {
+        return res.json([]);
+      }
+    }
+
     const appointments = await req.prisma.appointment.findMany({
       where,
       include: {
@@ -20,6 +30,7 @@ exports.getAll = async (req, res, next) => {
         patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
       },
       orderBy: { dateTime: 'asc' },
+      take: 200,
     });
     res.json(appointments);
   } catch (error) {

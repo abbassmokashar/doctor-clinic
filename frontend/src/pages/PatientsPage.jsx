@@ -17,7 +17,7 @@ import {
 import toast from 'react-hot-toast';
 
 const bloodTypes = ['A_POSITIVE', 'A_NEGATIVE', 'B_POSITIVE', 'B_NEGATIVE', 'AB_POSITIVE', 'AB_NEGATIVE', 'O_POSITIVE', 'O_NEGATIVE'];
-const genders = ['MALE', 'FEMALE', 'OTHER'];
+const genders = ['MALE', 'FEMALE', 'PREFER_NOT_TO_SAY'];
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState([]);
