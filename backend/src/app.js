@@ -17,12 +17,17 @@ const prescriptionRoutes = require('./routes/prescription.routes');
 const departmentRoutes = require('./routes/department.routes');
 const invoiceRoutes = require('./routes/invoice.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
+const reminderRoutes = require('./routes/reminder.routes');
+const { startReminderScheduler } = require('./services/reminder.service');
 
 const { errorHandler, notFound } = require('./middleware/error.middleware');
 
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
+
+// Start the appointment reminder scheduler
+startReminderScheduler(prisma);
 
 // Middleware
 app.use(cors());
@@ -48,6 +53,7 @@ app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/reminders', reminderRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

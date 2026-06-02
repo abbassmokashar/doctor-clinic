@@ -21,6 +21,9 @@
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
   }
+  .btn-remind {
+    @apply btn bg-emerald-100 text-emerald-700 hover:bg-emerald-200 focus:ring-emerald-500;
+  }
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
   }

@@ -120,6 +120,12 @@ export const invoiceAPI = {
   markPaid: (id, data) => api.patch(`/invoices/${id}/pay`, data),
 };
 
+// Reminders
+export const reminderAPI = {
+  trigger: (params) => api.post('/reminders/trigger', null, { params }),
+  sendForAppointment: (appointmentId) => api.post(`/reminders/send/${appointmentId}`),
+};
+
 // Dashboard
 export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats'),

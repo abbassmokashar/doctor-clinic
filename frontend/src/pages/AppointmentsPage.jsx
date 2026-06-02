@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { appointmentAPI, doctorAPI, patientAPI } from '../services/api';
+import { appointmentAPI, doctorAPI, patientAPI, reminderAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Calendar,
@@ -23,6 +23,7 @@ export default function AppointmentsPage() {
   const [dateFilter, setDateFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ doctorId: '', patientId: '', dateTime: '', duration: 30, reason: '' });
+  const [sendingReminder, setSendingReminder] = useState(null);
   const { isAdmin, isDoctor, isReceptionist } = useAuth();
   const canEdit = isAdmin || isDoctor || isReceptionist;
 
@@ -165,7 +166,27 @@ export default function AppointmentsPage() {
                     </td>
                     <td className="px-5 py-3">
                       {canEdit && (
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1">
+                          {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                            <button
+                              disabled={sendingReminder === appt.id}
+                              onClick={async () => {
+                                setSendingReminder(appt.id);
+                                try {
+                                  const res = await reminderAPI.sendForAppointment(appt.id);
+                                  toast.success(res.data.message || 'Reminder sent!');
+                                } catch (err) {
+                                  toast.error(err.response?.data?.error || 'Failed to send reminder');
+                                } finally {
+                                  setSendingReminder(null);
+                                }
+                              }}
+                              className="btn-sm btn-remind"
+                              title="Send WhatsApp reminder"
+                            >
+                              {sendingReminder === appt.id ? 'Sending...' : 'Remind'}
+                            </button>
+                          )}
                           {appt.status === 'SCHEDULED' && (
                             <>
                               <button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm btn-secondary">Confirm</button>
