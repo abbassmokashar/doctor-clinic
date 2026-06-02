@@ -24,19 +24,45 @@ function getBaseUrl() {
 }
 
 /**
- * Format a phone number to E.164 format for WhatsApp.
- * Patients may store numbers in various formats, so we strip non-digits
- * and prepend the country code if needed.
+ * WhatsApp requires phone numbers in E.164 format: country code + national number, no leading zero.
+ * e.g., Morocco: 2126XXXXXXXX, US: 1XXXXXXXXXX, UK: 44XXXXXXXXXX
  *
- * For demo purposes, we assume the numbers are already in a reasonable format.
- * In production, you'd want to normalize based on the clinic's country.
+ * Configure the default country code via WHATSAPP_COUNTRY_CODE env var (default: 212 for Morocco).
+ */
+const DEFAULT_COUNTRY_CODE = process.env.WHATSAPP_COUNTRY_CODE || '212';
+
+/**
+ * Format a phone number to E.164 format for WhatsApp (no +, no spaces, no leading zeros).
+ * Handles:
+ *  - "06XXXXXXXX" or "06XX-XXXXXX" (Morocco local) → "2126XXXXXXXX"
+ *  - "+2126XXXXXXXX" → "2126XXXXXXXX"
+ *  - "2126XXXXXXXX" → "2126XXXXXXXX"
  */
 function formatPhoneNumber(phone) {
   if (!phone) return null;
   // Strip all non-digit characters
   const digits = phone.replace(/\D/g, '');
-  // If it starts with 0 (e.g., 05xx xxx xxx), assume it needs a country code
-  // For demo, we'll just return the digits as-is and let the API handle formatting
+
+  if (!digits) return null;
+
+  // If it starts with '00', replace with nothing (international prefix)
+  // If it starts with '+', already handled by stripping
+  // If it starts with the country code already, return as-is
+  if (digits.startsWith(DEFAULT_COUNTRY_CODE) && digits.length > 7) {
+    return digits;
+  }
+
+  // If it starts with a leading zero (e.g., 06... or 06...), strip the zero and prepend country code
+  if (digits.startsWith('0')) {
+    return DEFAULT_COUNTRY_CODE + digits.substring(1);
+  }
+
+  // If it has 10-15 digits and doesn't start with country code, prepend it
+  if (digits.length >= 10 && digits.length <= 15) {
+    return DEFAULT_COUNTRY_CODE + digits;
+  }
+
+  // Fallback: return as-is
   return digits;
 }
 
@@ -47,7 +73,7 @@ function formatPhoneNumber(phone) {
  * @returns {Promise<Object>} Result object
  */
 function sendViaApi(to, body) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const url = getBaseUrl();
     const parsedUrl = new URL(url);
     const data = JSON.stringify({
@@ -79,16 +105,21 @@ function sendViaApi(to, body) {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             resolve({ success: true, data: parsed, statusCode: res.statusCode });
           } else {
-            resolve({ success: false, data: parsed, statusCode: res.statusCode });
+            // Extract the most descriptive error message from Meta's error object
+            const metaError = parsed?.error;
+            const errorDetail = metaError
+              ? `${metaError.message || ''}${metaError.error_user_title ? ` (${metaError.error_user_title})` : ''}${metaError.error_user_msg ? `: ${metaError.error_user_msg}` : ''}`.trim()
+              : JSON.stringify(parsed);
+            resolve({ success: false, error: errorDetail || `HTTP ${res.statusCode}`, data: parsed, statusCode: res.statusCode });
           }
         } catch (e) {
-          resolve({ success: false, error: e.message, raw: responseData, statusCode: res.statusCode });
+          resolve({ success: false, error: `Parse error: ${e.message}`, raw: responseData, statusCode: res.statusCode });
         }
       });
     });
 
     req.on('error', (err) => {
-      resolve({ success: false, error: err.message });
+      resolve({ success: false, error: `Network error: ${err.message}` });
     });
 
     req.write(data);

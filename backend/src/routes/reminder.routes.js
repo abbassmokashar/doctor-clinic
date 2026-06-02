@@ -46,11 +46,13 @@ router.post('/trigger', authenticate, authorize('ADMIN'), async (req, res, next)
 router.post('/send/:appointmentId', authenticate, authorize('ADMIN', 'DOCTOR', 'RECEPTIONIST'), async (req, res, next) => {
   try {
     const appointmentId = parseInt(req.params.appointmentId);
+    console.log(`[API] Sending reminder for appointment #${appointmentId}...`);
     const result = await sendSingleReminder(req.prisma, appointmentId);
 
     if (result.success) {
       res.json(result);
     } else {
+      console.error(`[API] Reminder failed for appointment #${appointmentId}:`, result);
       res.status(400).json(result);
     }
   } catch (error) {
