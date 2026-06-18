@@ -3,61 +3,20 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
-}
-
-enum UserRole {
-  ADMIN
-  DOCTOR
-  RECEPTIONIST
-}
-
-enum AppointmentStatus {
-  SCHEDULED
-  CONFIRMED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-  NO_SHOW
-}
-
-enum Gender {
-  MALE
-  FEMALE
-  PREFER_NOT_TO_SAY
-}
-
-enum BloodType {
-  A_POSITIVE
-  A_NEGATIVE
-  B_POSITIVE
-  B_NEGATIVE
-  AB_POSITIVE
-  AB_NEGATIVE
-  O_POSITIVE
-  O_NEGATIVE
-}
-
-enum InvoiceStatus {
-  PENDING
-  PAID
-  PARTIALLY_PAID
-  CANCELLED
-  REFUNDED
 }
 
 model User {
-  id          Int       @id @default(autoincrement())
-  email       String    @unique
+  id          Int      @id @default(autoincrement())
+  email       String   @unique
   password    String
   name        String
-  role        UserRole  @default(DOCTOR)
+  role        String   @default("DOCTOR")
   phone       String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   doctor      Doctor?
   patient     Patient?
@@ -82,6 +41,7 @@ model Doctor {
   appointments    Appointment[]
   schedules       DoctorSchedule[]
   medicalRecords  MedicalRecord[]
+  medicalTests    MedicalTest[]
   departments     DoctorDepartment[]
   prescriptions   Prescription[]
 
@@ -96,11 +56,11 @@ model Patient {
   firstName        String
   lastName         String
   dateOfBirth      DateTime?
-  gender           Gender?
+  gender           String?
   phone            String
   email            String?
   address          String?
-  bloodType        BloodType?
+  bloodType        String?
   allergies        String?
   emergencyContact String?
   emergencyPhone   String?
@@ -110,22 +70,25 @@ model Patient {
 
   appointments     Appointment[]
   medicalRecords   MedicalRecord[]
+  medicalTests     MedicalTest[]
   invoices         Invoice[]
 
   @@index([phone])
   @@index([email])
   @@index([firstName, lastName])
-}model Appointment {
-  id         Int               @id @default(autoincrement())
+}
+
+model Appointment {
+  id         Int      @id @default(autoincrement())
   doctorId   Int
   patientId  Int
   dateTime   DateTime
-  duration   Int               @default(30)
-  status     AppointmentStatus @default(SCHEDULED)
+  duration   Int      @default(30)
+  status     String   @default("SCHEDULED")
   reason     String?
   notes      String?
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   doctor     Doctor            @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   patient    Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -225,18 +188,38 @@ model DoctorDepartment {
   @@id([doctorId, departmentId])
 }
 
+model MedicalTest {
+  id          Int      @id @default(autoincrement())
+  patientId   Int
+  doctorId    Int
+  fileName    String
+  fileUrl     String
+  fileType    String
+  fileSize    Int
+  testType    String?
+  notes       String?
+  uploadedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor      Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([doctorId])
+}
+
 model Invoice {
-  id            Int            @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   patientId     Int
-  appointmentId Int?           @unique
+  appointmentId Int?     @unique
   amount        Float
-  paidAmount    Float          @default(0)
-  status        InvoiceStatus  @default(PENDING)
+  paidAmount    Float    @default(0)
+  status        String   @default("PENDING")
   description   String?
   dueDate       DateTime?
   paidAt        DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
   appointment   Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)

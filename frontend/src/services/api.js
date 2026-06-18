@@ -120,6 +120,16 @@ export const invoiceAPI = {
   markPaid: (id, data) => api.patch(`/invoices/${id}/pay`, data),
 };
 
+// Medical Tests
+export const medicalTestAPI = {
+  getByPatient: (patientId) => api.get(`/medical-tests/patient/${patientId}`),
+  getById: (id) => api.get(`/medical-tests/${id}`),
+  upload: (formData) => api.post('/medical-tests/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  delete: (id) => api.delete(`/medical-tests/${id}`),
+};
+
 // Reminders
 export const reminderAPI = {
   trigger: (params) => api.post('/reminders/trigger', null, { params }),

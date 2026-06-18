@@ -17,6 +17,7 @@ const prescriptionRoutes = require('./routes/prescription.routes');
 const departmentRoutes = require('./routes/department.routes');
 const invoiceRoutes = require('./routes/invoice.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
+const medicalTestRoutes = require('./routes/medicalTest.routes');
 const reminderRoutes = require('./routes/reminder.routes');
 const { startReminderScheduler } = require('./services/reminder.service');
 
@@ -53,7 +54,11 @@ app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/medical-tests', medicalTestRoutes);
 app.use('/api/reminders', reminderRoutes);
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Health check
 app.get('/api/health', (req, res) => {
