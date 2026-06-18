@@ -1,16 +1,21 @@
 exports.getAll = async (req, res, next) => {
   try {
-    const { status, doctorId, patientId, date } = req.query;
+    const { status, doctorId, patientId, date, start, end } = req.query;
     const where = {};
     if (status) where.status = status;
     if (doctorId) where.doctorId = parseInt(doctorId);
     if (patientId) where.patientId = parseInt(patientId);
     if (date) {
-      const start = new Date(date);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(date);
-      end.setHours(23, 59, 59, 999);
-      where.dateTime = { gte: start, lte: end };
+      const dayStart = new Date(date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(date);
+      dayEnd.setHours(23, 59, 59, 999);
+      where.dateTime = { gte: dayStart, lte: dayEnd };
+    } else if (start && end) {
+      where.dateTime = {
+        gte: new Date(start),
+        lte: new Date(end),
+      };
     }
 
     // Doctors can only see their own appointments
