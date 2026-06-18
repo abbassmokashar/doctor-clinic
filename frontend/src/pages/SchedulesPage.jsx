@@ -31,13 +31,9 @@ export default function SchedulesPage() {
       .getAll()
       .then((res) => {
         setDoctors(res.data);
-        // For doctors, auto-select their own profile
+        // Auto-select the first doctor (for doctors, this is always their own profile due to backend role filtering)
         if (res.data.length > 0) {
-          if (isDoctor) {
-            setSelectedDoctor(res.data[0]?.id || null);
-          } else {
-            setSelectedDoctor(res.data[0]?.id || null);
-          }
+          setSelectedDoctor(res.data[0]?.id || null);
         }
       })
       .catch(() => toast.error('Failed to load doctors'))

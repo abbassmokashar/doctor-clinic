@@ -18,6 +18,11 @@ export function AuthProvider({ children }) {
   const [showExpiryWarning, setShowExpiryWarning] = useState(false);
   const [expiryCountdown, setExpiryCountdown] = useState(60);
 
+  // Initial loading state
+  useEffect(() => {
+    setLoading(false);
+  }, []);
+
   // Refs to keep timer callbacks fresh
   const inactivityRef = useRef(null);
   const warningIntervalRef = useRef(null);

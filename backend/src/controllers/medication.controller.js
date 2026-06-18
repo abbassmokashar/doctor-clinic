@@ -2,7 +2,7 @@ exports.getAll = async (req, res, next) => {
   try {
     const { search } = req.query;
     const where = search
-      ? { name: { contains: search, mode: 'insensitive' } }
+      ? { name: { contains: search } }
       : {};
 
     const medications = await req.prisma.medication.findMany({

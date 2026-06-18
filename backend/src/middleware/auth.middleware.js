@@ -1,7 +1,4 @@
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
 
 const authenticate = async (req, res, next) => {
   try {
@@ -13,7 +10,7 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await prisma.user.findUnique({
+    const user = await req.prisma.user.findUnique({
       where: { id: decoded.id },
       select: { id: true, email: true, name: true, role: true, isActive: true },
     });

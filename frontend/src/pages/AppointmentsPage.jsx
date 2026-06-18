@@ -118,7 +118,7 @@ export default function AppointmentsPage() {
     patientAPI.getAll({})
       .then((res) => setPatients(res.data))
       .catch(() => {});
-  }, []);  // Fetch appointments when date filter changes (list view)
+  }, []);  // Fetch appointments when view mode, filter, or month changes
   useEffect(() => {
     if (viewMode === 'list') {
       setLoading(true);
@@ -129,27 +129,13 @@ export default function AppointmentsPage() {
         .then((res) => setAppointments(res.data))
         .catch(() => toast.error('Failed to load appointments'))
         .finally(() => setLoading(false));
-    }
-  }, [viewMode, filterStatus]);
-
-  // Fetch appointments for calendar view when month changes
-  useEffect(() => {
-    if (viewMode === 'calendar') {
-      setLoading(true);
+    } else if (viewMode === 'calendar') {
       const start = new Date(year, month, 1);
       start.setDate(start.getDate() - start.getDay());
       const end = new Date(year, month + 1, 0);
       end.setDate(end.getDate() + (6 - end.getDay()));
       end.setHours(23, 59, 59, 999);
-      const params = {};
-      if (filterStatus) params.status = filterStatus;
-      params.start = start.toISOString();
-      params.end = end.toISOString();
-      appointmentAPI
-        .getAll(params)
-        .then((res) => setAppointments(res.data))
-        .catch(() => toast.error('Failed to load appointments'))
-        .finally(() => setLoading(false));
+      fetchAppointments(start, end);
     }
   }, [currentMonth, filterStatus, viewMode]);
 

@@ -27,6 +27,7 @@ export default function DoctorsPage() {
     name: '',
     email: '',
     password: '',
+    phone: '',
     specialization: '',
     licenseNumber: '',
     bio: '',
@@ -66,7 +67,7 @@ export default function DoctorsPage() {
       }
       setShowModal(false);
       setEditing(null);
-      setForm({ name: '', email: '', password: '', specialization: '', licenseNumber: '', bio: '', consultationFee: '' });
+      setForm({ name: '', email: '', password: '', phone: '', specialization: '', licenseNumber: '', bio: '', consultationFee: '' });
       fetchDoctors();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Operation failed');
@@ -79,6 +80,7 @@ export default function DoctorsPage() {
       name: doctor.user?.name || '',
       email: doctor.user?.email || '',
       password: '',
+      phone: doctor.user?.phone || '',
       specialization: doctor.specialization || '',
       licenseNumber: doctor.licenseNumber || '',
       bio: doctor.bio || '',
@@ -109,7 +111,7 @@ export default function DoctorsPage() {
           <button
             onClick={() => {
               setEditing(null);
-              setForm({ name: '', email: '', password: '', specialization: '', licenseNumber: '', bio: '', consultationFee: '' });
+              setForm({ name: '', email: '', password: '', phone: '', specialization: '', licenseNumber: '', bio: '', consultationFee: '' });
               setShowModal(true);
             }}
             className="btn-primary"
@@ -234,22 +236,29 @@ export default function DoctorsPage() {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {!editing && (
-                <>
-                  <div>
-                    <label className="label">Doctor Name *</label>
-                    <input type="text" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required={!editing} />
-                  </div>
-                  <div>
-                    <label className="label">Email *</label>
-                    <input type="email" className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required={!editing} />
-                  </div>
-                  <div>
-                    <label className="label">Password *</label>
-                    <input type="password" className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editing} placeholder="Min 6 characters" />
-                  </div>
-                </>
+              <div>
+                <label className="label">Doctor Name *</label>
+                <input type="text" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              </div>
+              <div>
+                <label className="label">Email *</label>
+                <input type="email" className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+              </div>
+              {editing ? (
+                <div>
+                  <label className="label">New Password</label>
+                  <input type="password" className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Leave blank to keep current" />
+                </div>
+              ) : (
+                <div>
+                  <label className="label">Password *</label>
+                  <input type="password" className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required placeholder="Min 6 characters" />
+                </div>
               )}
+              <div>
+                <label className="label">Phone</label>
+                <input type="tel" className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+1-555-0100" />
+              </div>
               <div>
                 <label className="label">Specialization</label>
                 <input

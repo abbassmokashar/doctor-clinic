@@ -50,6 +50,15 @@ export default function PatientDetailPage() {
       .finally(() => setTestsLoading(false));
   };
 
+  // Close preview on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setPreviewTest(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useEffect(() => {
     patientAPI
       .getById(id)
@@ -158,8 +167,9 @@ export default function PatientDetailPage() {
               {patient.gender && (patient.gender === 'PREFER_NOT_TO_SAY' ? 'Prefer not to say' : patient.gender.charAt(0) + patient.gender.slice(1).toLowerCase().replace(/_/g, ' '))}
               {patient.dateOfBirth && ` • ${new Date(patient.dateOfBirth).toLocaleDateString()}`}
             </p>
-          </div>            {patient.bloodType && (
-            <span className="badge bg-red-50 text-red-700 text-sm">{patient.bloodType.replace('_', ' ')}</span>
+          </div>
+          {patient.bloodType && (
+            <span className="badge bg-red-50 text-red-700 text-sm shrink-0">{patient.bloodType.replace('_', ' ')}</span>
           )}
         </div>
 
@@ -439,7 +449,6 @@ export default function PatientDetailPage() {
       {previewTest && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onKeyDown={(e) => e.key === 'Escape' && setPreviewTest(null)}
         >
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setPreviewTest(null)} />
           <div className="relative bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">

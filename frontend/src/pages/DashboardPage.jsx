@@ -157,8 +157,7 @@ export default function DashboardPage() {
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex items-center justify-center w-9 h-9 rounded-full bg-primary-50 text-primary-700 text-sm font-semibold">
-                        {new Date(appt.dateTime).getHours().toString().padStart(2, '0')}
-                        {new Date(appt.dateTime).getMinutes().toString().padStart(2, '0')}
+                        {new Date(appt.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-900">

@@ -67,15 +67,24 @@ export default function MedicalRecordsPage() {
       const res = await medicalRecordAPI.create(form);
       // Create prescriptions for this record
       if (prescriptions.length > 0) {
+        let hasError = false;
         for (const p of prescriptions) {
-          await prescriptionAPI.create({
-            medicalRecordId: res.data.id,
-            medicationName: p.medicationName,
-            dosage: p.dosage,
-            frequency: p.frequency,
-            duration: p.duration,
-            instructions: p.instructions,
-          }).catch(() => {});
+          try {
+            await prescriptionAPI.create({
+              medicalRecordId: res.data.id,
+              medicationName: p.medicationName,
+              dosage: p.dosage,
+              frequency: p.frequency,
+              duration: p.duration,
+              instructions: p.instructions,
+            });
+          } catch (err) {
+            hasError = true;
+            console.error('Failed to create prescription:', err);
+          }
+        }
+        if (hasError) {
+          toast.error('Some prescriptions could not be saved');
         }
       }
       toast.success('Medical record created');

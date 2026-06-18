@@ -106,7 +106,7 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const doctorId = parseInt(req.params.id);
-    const { specialization, licenseNumber, bio, consultationFee, isAvailable } = req.body;
+    const { specialization, licenseNumber, bio, consultationFee, isAvailable, name, email, password } = req.body;
 
     // Doctors can only update their own profile
     if (req.user.role === 'DOCTOR') {
@@ -116,25 +116,82 @@ exports.update = async (req, res, next) => {
       }
     }
 
-    const doctor = await req.prisma.doctor.update({
-      where: { id: doctorId },
-      data: { specialization, licenseNumber, bio, consultationFee, isAvailable },
-      include: {
-        user: { select: { id: true, email: true, name: true } },
-      },
+    // Update doctor and optionally the associated user in a transaction
+    const doctor = await req.prisma.$transaction(async (tx) => {
+      const doctor = await tx.doctor.findUnique({
+        where: { id: doctorId },
+        select: { userId: true },
+      });
+
+      if (!doctor) {
+        throw new Error('Doctor not found.');
+      }
+
+      // Update user fields if provided
+      const userData = {};
+      if (name !== undefined) userData.name = name;
+      if (email !== undefined) {
+        // Check if email is already taken by another user
+        const existingUser = await tx.user.findUnique({ where: { email } });
+        if (existingUser && existingUser.id !== doctor.userId) {
+          throw new Error('Email already registered.');
+        }
+        userData.email = email;
+      }
+      if (password) {
+        userData.password = await bcrypt.hash(password, 12);
+      }
+      if (phone !== undefined) userData.phone = phone;
+
+      if (Object.keys(userData).length > 0) {
+        await tx.user.update({
+          where: { id: doctor.userId },
+          data: userData,
+        });
+      }
+
+      // Update doctor fields
+      return tx.doctor.update({
+        where: { id: doctorId },
+        data: { specialization, licenseNumber, bio, consultationFee, isAvailable },
+        include: {
+          user: { select: { id: true, email: true, name: true } },
+        },
+      });
     });
 
     res.json(doctor);
   } catch (error) {
+    if (error.message === 'Doctor not found.') {
+      return res.status(404).json({ message: error.message });
+    }
+    if (error.message === 'Email already registered.') {
+      return res.status(400).json({ message: error.message });
+    }
     next(error);
   }
 };
 
 exports.remove = async (req, res, next) => {
   try {
-    await req.prisma.doctor.delete({
-      where: { id: parseInt(req.params.id) },
+    const doctorId = parseInt(req.params.id);
+
+    // Find the doctor first to get the userId
+    const doctor = await req.prisma.doctor.findUnique({
+      where: { id: doctorId },
+      select: { userId: true },
     });
+
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found.' });
+    }
+
+    // Delete the doctor and associated user in a transaction
+    await req.prisma.$transaction(async (tx) => {
+      await tx.doctor.delete({ where: { id: doctorId } });
+      await tx.user.delete({ where: { id: doctor.userId } });
+    });
+
     res.json({ message: 'Doctor deleted successfully.' });
   } catch (error) {
     next(error);
