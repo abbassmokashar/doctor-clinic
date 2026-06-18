@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: doctor-clinic
+    env: node
+    region: ohio
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && mkdir -p uploads/medical-tests && cd ../frontend && npm install && npm run build
+    startCommand: node src/app.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:./dev.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PORT
+        value: 10000
