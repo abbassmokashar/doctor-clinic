@@ -13,6 +13,7 @@ import MedicalRecordsPage from './pages/MedicalRecordsPage';
 import MedicationsPage from './pages/MedicationsPage';
 import DepartmentsPage from './pages/DepartmentsPage';
 import InvoicesPage from './pages/InvoicesPage';
+import SettingsPage from './pages/SettingsPage';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="medications" element={<MedicationsPage />} />
         <Route path="departments" element={<DepartmentsPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

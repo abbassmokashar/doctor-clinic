@@ -25,7 +25,7 @@ const STATUS_COLORS = {
   IN_PROGRESS: { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500', border: 'border-l-amber-500' },
   COMPLETED: { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', border: 'border-l-emerald-500' },
   CANCELLED: { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500', border: 'border-l-red-500' },
-  NO_SHOW: { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500', border: 'border-l-gray-500' },
+  NO_SHOW: { bg: 'bg-gray-200', text: 'text-gray-700', dot: 'bg-gray-500', border: 'border-l-gray-500' },
 };
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -283,7 +283,7 @@ export default function AppointmentsPage() {
             <button
               onClick={() => setViewMode('calendar')}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                viewMode === 'calendar' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                viewMode === 'calendar' ? 'bg-btn-primary text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'
               }`}
             >
               <Grid3X3 className="w-3.5 h-3.5 inline mr-1" />
@@ -292,7 +292,7 @@ export default function AppointmentsPage() {
             <button
               onClick={() => setViewMode('list')}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                viewMode === 'list' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                viewMode === 'list' ? 'bg-btn-primary text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'
               }`}
             >
               <List className="w-3.5 h-3.5 inline mr-1" />
@@ -368,22 +368,22 @@ export default function AppointmentsPage() {
                     <button
                       key={idx}
                       onClick={() => handleDayClick(dayData.date)}
-                      className={`relative min-h-[90px] p-1.5 border-b border-r border-gray-100 text-left transition-colors hover:bg-gray-50/80 ${
-                        !dayData.isCurrentMonth ? 'bg-gray-50/50' : ''
+                      className={`relative min-h-[90px] p-1.5 border-b border-r border-gray-100 text-left transition-colors hover:bg-gray-100/50 ${
+                        !dayData.isCurrentMonth ? 'bg-gray-100/30' : ''
                       } ${isSelected(dayData.date) ? 'ring-2 ring-primary-500 ring-inset z-10 bg-primary-50/50' : ''} ${
-                        isToday(dayData.date) ? 'bg-blue-50/50' : ''
+                        isToday(dayData.date) ? 'ring-2 ring-primary-500 ring-inset' : ''
                       }`}
                     >
                       {/* Day number */}
                       <span
                         className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium ${
                           isToday(dayData.date)
-                            ? 'bg-primary-600 text-white'
+                            ? 'bg-btn-primary text-gray-900'
                             : isSelected(dayData.date)
-                            ? 'bg-primary-600 text-white'
+                            ? 'bg-btn-primary text-gray-900'
                             : dayData.isCurrentMonth
                             ? 'text-gray-900'
-                            : 'text-gray-400'
+                            : 'text-gray-500'
                         }`}
                       >
                         {dayData.day}
@@ -406,7 +406,7 @@ export default function AppointmentsPage() {
                             </div>
                           ))}
                           {appts.length > 3 && (
-                            <span className="text-[10px] text-gray-400 pl-1">
+                            <span className="text-[10px] pl-1" style={{ color: 'var(--text-muted)' }}>
                               +{appts.length - 3} more
                             </span>
                           )}
@@ -447,7 +447,7 @@ export default function AppointmentsPage() {
                     </div>
                   ) : dayAppointments.length === 0 ? (
                     <div className="text-center py-6">
-                      <Calendar className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <Calendar className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
                       <p className="text-sm text-gray-400 mb-3">No appointments on this day</p>
                       {canEdit && (
                         <button onClick={handleCreateFromDay} className="btn-sm btn-primary">

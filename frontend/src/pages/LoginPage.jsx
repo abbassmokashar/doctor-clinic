@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';import {
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import {
   Stethoscope,
   Eye,
   EyeOff,
@@ -9,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';import {
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
+  const { appName } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -40,7 +43,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-600 text-white mb-4 shadow-lg shadow-primary-200">
             <Stethoscope className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Doctor Clinic</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{appName}</h1>
           <p className="text-gray-500 mt-1">Sign in to your account</p>
         </div>
 

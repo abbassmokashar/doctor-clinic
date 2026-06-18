@@ -19,6 +19,8 @@ const invoiceRoutes = require('./routes/invoice.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const medicalTestRoutes = require('./routes/medicalTest.routes');
 const reminderRoutes = require('./routes/reminder.routes');
+const settingRoutes = require('./routes/setting.routes');
+const backupRoutes = require('./routes/backup.routes');
 const { startReminderScheduler } = require('./services/reminder.service');
 
 const { errorHandler, notFound } = require('./middleware/error.middleware');
@@ -56,6 +58,8 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/medical-tests', medicalTestRoutes);
 app.use('/api/reminders', reminderRoutes);
+app.use('/api/settings', settingRoutes);
+app.use('/api/backup', backupRoutes);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

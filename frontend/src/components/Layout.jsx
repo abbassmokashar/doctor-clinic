@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   LayoutDashboard,
   Stethoscope,
@@ -15,6 +16,7 @@ import {
   Menu,
   X,
   ChevronDown,
+  Settings,
 } from 'lucide-react';
 
 const allNavItems = [
@@ -27,12 +29,14 @@ const allNavItems = [
   { to: '/medications', icon: Pill, label: 'Medications', roles: ['ADMIN'] },
   { to: '/departments', icon: Building2, label: 'Departments', roles: ['ADMIN'] },
   { to: '/invoices', icon: Receipt, label: 'Invoices', roles: ['ADMIN', 'RECEPTIONIST'] },
+  { to: '/settings', icon: Settings, label: 'Settings', roles: ['ADMIN'] },
 ];
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { appName } = useTheme();
   const navigate = useNavigate();
 
   const navItems = useMemo(() => {
@@ -68,7 +72,7 @@ export default function Layout() {
               <Stethoscope className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Doctor Clinic</h1>
+              <h1 className="text-lg font-bold text-gray-900">{appName}</h1>
               <p className="text-xs text-gray-500">Management System</p>
             </div>
           </div>

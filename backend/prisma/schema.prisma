@@ -208,6 +208,12 @@ model MedicalTest {
   @@index([doctorId])
 }
 
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
+
 model Invoice {
   id            Int      @id @default(autoincrement())
   patientId     Int

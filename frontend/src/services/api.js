@@ -141,4 +141,21 @@ export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats'),
 };
 
+// Settings
+export const settingsAPI = {
+  getAll: () => api.get('/settings'),
+  update: (data) => api.put('/settings', data),
+  getUsers: () => api.get('/settings/users'),
+  updateUser: (id, data) => api.put(`/settings/users/${id}`, data),
+};
+
+// Backup
+export const backupAPI = {
+  getInfo: () => api.get('/backup/info'),
+  download: () => api.get('/backup/download', { responseType: 'blob' }),
+  restore: (formData) => api.post('/backup/restore', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+};
+
 export default api;

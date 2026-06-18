@@ -42,39 +42,34 @@ export default function DashboardPage() {
       label: 'Total Doctors',
       value: stats?.totalDoctors || 0,
       icon: Stethoscope,
-      color: 'bg-blue-500',
-      bg: 'bg-blue-50',
+      statVar: '--stat-blue',
       link: '/doctors',
     }] : [{
       label: 'Your Profile',
       value: 1,
       icon: Stethoscope,
-      color: 'bg-blue-500',
-      bg: 'bg-blue-50',
+      statVar: '--stat-blue',
       link: '/doctors',
     }]),
     {
       label: isDoctor ? 'My Patients' : 'Total Patients',
       value: stats?.totalPatients || 0,
       icon: Users,
-      color: 'bg-emerald-500',
-      bg: 'bg-emerald-50',
+      statVar: '--stat-emerald',
       link: '/patients',
     },
     {
       label: "Today's Appointments",
       value: stats?.todayAppointments || 0,
       icon: Calendar,
-      color: 'bg-amber-500',
-      bg: 'bg-amber-50',
+      statVar: '--stat-amber',
       link: '/appointments',
     },
     ...(!isDoctor ? [{
       label: 'Pending Invoices',
       value: stats?.pendingInvoices || 0,
       icon: DollarSign,
-      color: 'bg-rose-500',
-      bg: 'bg-rose-50',
+      statVar: '--stat-rose',
       link: '/invoices',
     }] : []),
   ];
@@ -105,8 +100,8 @@ export default function DashboardPage() {
         {statCards.map((card) => (
           <Link key={card.label} to={card.link} className="card p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
-              <div className={`p-2.5 rounded-lg ${card.bg}`}>
-                <card.icon className={`w-5 h-5 ${card.color.replace('bg-', 'text-')}`} />
+              <div className="p-2.5 rounded-lg" style={{ backgroundColor: `color-mix(in srgb, var(${card.statVar}) 15%, transparent)` }}>
+                <card.icon className="w-5 h-5" style={{ color: `var(${card.statVar})` }} />
               </div>
             </div>
             <p className="text-2xl font-bold text-gray-900 mt-3">{card.value}</p>
@@ -125,8 +120,8 @@ export default function DashboardPage() {
                 ${(stats?.totalRevenue || 0).toLocaleString()}
               </p>
             </div>
-            <div className="p-3 rounded-lg bg-emerald-50">
-              <DollarSign className="w-6 h-6 text-emerald-600" />
+            <div className="p-3 rounded-lg" style={{ backgroundColor: 'color-mix(in srgb, var(--stat-emerald) 15%, transparent)' }}>
+              <DollarSign className="w-6 h-6" style={{ color: 'var(--stat-emerald)' }} />
             </div>
           </div>
         </div>

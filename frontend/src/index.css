@@ -3,8 +3,98 @@
 @tailwind utilities;
 
 @layer base {
+  /* ─── Light / Dark Theme ──────────────────────────────────────────── */
+
+  :root,
+  [data-theme="light"] {
+    --primary-50: #eff6ff;
+    --primary-100: #dbeafe;
+    --primary-200: #bfdbfe;
+    --primary-300: #93c5fd;
+    --primary-400: #60a5fa;
+    --primary-500: #3b82f6;
+    --primary-600: #2563eb;
+    --primary-700: #1d4ed8;
+    --primary-800: #1e40af;
+    --primary-900: #1e3a8a;
+    --surface: #ffffff;
+    --surface-hover: #f1f5f9;
+    --surface-alt: #f8fafc;
+    --border: #e2e8f0;
+    --border-light: #f1f5f9;
+    --text-body: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
+    --text-label: #334155;
+    --body-bg: #f1f5f9;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    /* Button colors */
+    --btn-primary-bg: #2563eb;
+    --btn-primary-hover: #1d4ed8;
+    --toggle-thumb: #ffffff;
+    /* Dashboard stat colors */
+    --stat-blue: #3b82f6;
+    --stat-emerald: #10b981;
+    --stat-amber: #f59e0b;
+    --stat-rose: #f43f5e;
+  }
+
+  [data-theme="dark"] {
+    --primary-50: #1e4470;
+    --primary-100: #1e3a8a;
+    --primary-200: #1e40af;
+    --primary-300: #2563eb;
+    --primary-400: #3b82f6;
+    --primary-500: #60a5fa;
+    --primary-600: #93c5fd;
+    --primary-700: #bfdbfe;
+    --primary-800: #dbeafe;
+    --primary-900: #eff6ff;
+    --surface: #1e293b;
+    --surface-hover: #253545;
+    --surface-alt: #151e2c;
+    --border: #334155;
+    --border-light: #293548;
+    --text-body: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --text-label: #cbd5e1;
+    --body-bg: #0f172a;
+    --gray-50: #1e293b;
+    --gray-100: #253545;
+    --gray-200: #334155;
+    --gray-300: #475569;
+    --gray-400: #64748b;
+    --gray-500: #94a3b8;
+    --gray-600: #cbd5e1;
+    --gray-700: #e2e8f0;
+    --gray-800: #f1f5f9;
+    --gray-900: #f8fafc;
+    /* Button colors */
+    --btn-primary-bg: #3b82f6;
+    --btn-primary-hover: #2563eb;
+    --toggle-thumb: #ffffff;
+    /* Dashboard stat colors (lighter versions for dark mode) */
+    --stat-blue: #60a5fa;
+    --stat-emerald: #34d399;
+    --stat-amber: #fbbf24;
+    --stat-rose: #fb7185;
+  }
+
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    background-color: var(--body-bg);
+    color: var(--text-body);
+    @apply antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 
@@ -13,31 +103,95 @@
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+    @apply btn;
+    background-color: var(--btn-primary-bg);
+    color: white;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--btn-primary-hover);
+  }
+  .btn-primary:focus {
+    --tw-ring-color: var(--btn-primary-bg);
   }
   .btn-secondary {
-    @apply btn bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-primary-500;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--surface);
+    color: var(--text-label);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--surface-hover);
+  }
+  .btn-secondary:focus {
+    --tw-ring-color: var(--primary-500);
   }
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
   }
-  .btn-remind {
-    @apply btn bg-emerald-100 text-emerald-700 hover:bg-emerald-200 focus:ring-emerald-500;
-  }
   .btn-sm {
-    @apply px-3 py-1.5 text-xs;
+    @apply btn px-3 py-1.5 text-xs;
   }
   .input {
-    @apply block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-50;
+    display: block;
+    width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    background-color: var(--surface);
+    color: var(--text-body);
+  }
+  .input::placeholder {
+    color: var(--text-muted);
+  }
+  .input:focus {
+    border-color: var(--primary-500);
+    outline: none;
+    box-shadow: 0 0 0 1px var(--primary-500);
+  }
+  .input:disabled {
+    background-color: var(--gray-100);
   }
   .label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
+    display: block;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    color: var(--text-label);
+    margin-bottom: 0.25rem;
   }
   .card {
-    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
+    background-color: var(--surface);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   }
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  /* Toggle Switch */
+  .toggle {
+    @apply relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer transition-colors duration-200;
+    background-color: var(--gray-300);
+  }
+  .toggle[data-checked="true"] {
+    background-color: var(--btn-primary-bg);
+  }
+  .toggle-thumb {
+    display: inline-block;
+    height: 1.25rem;
+    width: 1.25rem;
+    border-radius: 9999px;
+    background-color: var(--toggle-thumb);
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2);
+    transition: transform 0.2s;
+    transform: translateX(0.25rem);
+  }
+  .toggle[data-checked="true"] .toggle-thumb {
+    transform: translateX(1.5rem);
   }
 }
 
@@ -49,9 +203,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--gray-300);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--gray-400);
 }
