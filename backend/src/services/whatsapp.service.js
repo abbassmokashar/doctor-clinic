@@ -1,196 +1,431 @@
 /**
  * WhatsApp Messaging Service
  *
- * Supports two modes:
- *  - "console" (default): logs messages to console for testing
- *  - "live": sends real WhatsApp messages via Meta Cloud API
+ * Uses whatsapp-web.js (free, QR-code-based) to send WhatsApp messages.
  *
- * Switch modes by setting WHATSAPP_MODE=live in .env.
- * You'll also need WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN for live mode.
+ * Two modes:
+ *  - "web" (default): connects via WhatsApp Web, scan QR code once, session saved via LocalAuth
+ *  - "console": logs messages to console for testing
+ *
+ * Switch modes by setting WHATSAPP_MODE=console in .env to disable real messaging.
  */
 
-const https = require('https');
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
+
+// ─── Mode Configuration ───────────────────────────────────────────────────────
 
 const MODE_CONSOLE = 'console';
-const MODE_LIVE = 'live';
+const MODE_WEB = 'web';
 
-const MODE = (process.env.WHATSAPP_MODE || MODE_CONSOLE).toLowerCase();
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v23.0';
+const MODE = (process.env.WHATSAPP_MODE || MODE_WEB).toLowerCase();
 
-function getBaseUrl() {
-  return `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
-}
+// ─── Client State ─────────────────────────────────────────────────────────────
+
+let client = null;
+let isReady = false;
+let isInitialized = false;
+let qrDisplayed = false;
+let initAttempts = 0;
+const MAX_INIT_ATTEMPTS = 3;
+
+// State exposed via API
+let latestQrDataUrl = null;
+let connectedDeviceName = null;
+let connectedPhoneNumber = null;
+let connectionStatus = 'disconnected'; // 'connecting' | 'qr-ready' | 'connected' | 'disconnected' | 'auth_failure'
 
 /**
- * WhatsApp requires phone numbers in E.164 format: country code + national number, no leading zero.
- * e.g., Morocco: 2126XXXXXXXX, US: 1XXXXXXXXXX, UK: 44XXXXXXXXXX
- *
- * Configure the default country code via WHATSAPP_COUNTRY_CODE env var (default: 212 for Morocco).
+ * Initialize the WhatsApp Web client.
+ * Uses LocalAuth to persist the session so you only need to scan QR once.
  */
+function initializeClient() {
+  if (isInitialized) return;
+  if (initAttempts >= MAX_INIT_ATTEMPTS) {
+    console.error('[WHATSAPP] Max initialization attempts reached. Please restart the server.');
+    return;
+  }
+  isInitialized = true;
+  initAttempts++;
+
+  if (MODE !== MODE_WEB) {
+    console.log(`[WHATSAPP] Mode set to "${MODE}". WhatsApp client not initialized.`);
+    return;
+  }
+
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('📱 [WHATSAPP] Initializing WhatsApp Web client...');
+  console.log('   Using whatsapp-web.js (free, QR code authentication)');
+  console.log('   Session saved via LocalAuth — scan QR once, stays logged in.');
+  console.log('   Set WHATSAPP_MODE=console to disable real messaging.');
+  console.log('━'.repeat(60));
+  console.log('');
+
+  client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+      executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--no-first-run',
+        '--disable-extensions',
+        '--disable-gpu',
+        '--disable-sync',
+      ],
+    },
+    webVersionCache: {
+      type: 'remote',
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1042150245-alpha.html',
+    },
+  });
+
+  // ── QR Code Event ──────────────────────────────────────────────────────────
+  client.on('qr', async (qr) => {
+    // Generate data URL for the API
+    try {
+      latestQrDataUrl = await QRCode.toDataURL(qr);
+    } catch (err) {
+      console.error('[WHATSAPP] Failed to generate QR data URL:', err.message);
+    }
+
+    connectionStatus = 'qr-ready';
+    connectedDeviceName = null;
+    connectedPhoneNumber = null;
+
+    if (!qrDisplayed) {
+      qrDisplayed = true;
+      console.log('');
+      console.log('╔' + '═'.repeat(58) + '╗');
+      console.log('║        📱  SCAN THE QR CODE WITH YOUR WHATSAPP APP         ║');
+      console.log('╠' + '═'.repeat(58) + '╣');
+      console.log('║  Open WhatsApp on your phone →                              ║');
+      console.log('║  Menu (3 dots) or Settings → Linked Devices →               ║');
+      console.log('║  Link a Device → Scan this QR code                          ║');
+      console.log('╚' + '═'.repeat(58) + '╝');
+      console.log('');
+      qrcode.generate(qr, { small: true });
+      console.log('');
+    } else {
+      console.log('[WHATSAPP] QR code refreshed. Scan the new code above.');
+      qrcode.generate(qr, { small: true });
+    }
+  });
+
+  // ── Ready Event ─────────────────────────────────────────────────────────────
+  client.on('ready', async () => {
+    isReady = true;
+    connectionStatus = 'connected';
+    connectedDeviceName = client.info?.pushname || 'WhatsApp User';
+    connectedPhoneNumber = client.info?.wid?.user || null;
+    latestQrDataUrl = null;
+
+    const userInfo = client.info?.pushname || client.info?.wid?.user || 'Unknown';
+    console.log('');
+    console.log('━'.repeat(60));
+    console.log(`✅ [WHATSAPP] Connected! ✅`);
+    console.log(`   Name:    ${userInfo}`);
+    console.log(`   Number:  ${client.info?.wid?.user || 'Unknown'}`);
+    console.log('   Status:  Ready to send messages');
+    console.log('━'.repeat(60));
+    console.log('');
+
+    // Pre-load contacts to populate LID mappings in the store.
+    // WhatsApp's transition from JID (phone@c.us) to LID means we need
+    // to sync contacts first so sendMessage can resolve the correct identifier.
+    try {
+      console.log('[WHATSAPP] Pre-loading contacts to sync LID mappings...');
+      const contacts = await client.getContacts();
+      console.log(`[WHATSAPP] ✓ Loaded ${contacts.length} contacts (LID mappings synced)`);
+    } catch (err) {
+      console.warn('[WHATSAPP] Could not pre-load contacts (will retry on send):', err.message);
+    }
+  });
+
+  // ── Disconnected Event ──────────────────────────────────────────────────────
+  client.on('disconnected', (reason) => {
+    isReady = false;
+    connectionStatus = 'disconnected';
+    connectedDeviceName = null;
+    connectedPhoneNumber = null;
+    latestQrDataUrl = null;
+    console.warn('');
+    console.warn(`⚠️ [WHATSAPP] Disconnected: ${reason}`);
+    console.warn('   Reconnecting in 10 seconds...');
+    console.warn('');
+    setTimeout(() => {
+      isInitialized = false;
+      qrDisplayed = false;
+      client = null;
+      initializeClient();
+    }, 10000);
+  });
+
+  // ── Auth Failure Event ──────────────────────────────────────────────────────
+  client.on('auth_failure', (msg) => {
+    isReady = false;
+    connectionStatus = 'auth_failure';
+    connectedDeviceName = null;
+    connectedPhoneNumber = null;
+    latestQrDataUrl = null;
+    console.error('');
+    console.error('❌ [WHATSAPP] Authentication failed.');
+    console.error(`   Reason: ${msg}`);
+    console.error('   To re-authenticate:');
+    console.error('   1. Stop the server');
+    console.error('   2. Delete the ".wwebjs_auth" folder in the backend directory');
+    console.error('   3. Restart the server to see the QR code again');
+    console.error('');
+  });
+
+  client.initialize();
+}
+
+// Initialize the client when this module loads
+initializeClient();
+
+// ─── Phone Number Formatting ──────────────────────────────────────────────────
+
 const DEFAULT_COUNTRY_CODE = process.env.WHATSAPP_COUNTRY_CODE || '212';
 
 /**
- * Format a phone number to E.164 format for WhatsApp (no +, no spaces, no leading zeros).
+ * Format a phone number to E.164 format (no +, no spaces, no leading zeros).
  * Handles:
- *  - "06XXXXXXXX" or "06XX-XXXXXX" (Morocco local) → "2126XXXXXXXX"
+ *  - "06XXXXXXXX" (local format) → "2126XXXXXXXX"
  *  - "+2126XXXXXXXX" → "2126XXXXXXXX"
  *  - "2126XXXXXXXX" → "2126XXXXXXXX"
  */
 function formatPhoneNumber(phone) {
   if (!phone) return null;
-  // Strip all non-digit characters
   const digits = phone.replace(/\D/g, '');
-
   if (!digits) return null;
 
-  // If it starts with '00', replace with nothing (international prefix)
-  // If it starts with '+', already handled by stripping
-  // If it starts with the country code already, return as-is
+  // Already has country code
   if (digits.startsWith(DEFAULT_COUNTRY_CODE) && digits.length > 7) {
     return digits;
   }
-
-  // If it starts with a leading zero (e.g., 06... or 06...), strip the zero and prepend country code
+  // Local number starting with 0 (e.g., 06XXXXXXXX)
   if (digits.startsWith('0')) {
     return DEFAULT_COUNTRY_CODE + digits.substring(1);
   }
-
-  // If it has 10-15 digits and doesn't start with country code, prepend it
+  // Any other number with 10-15 digits, prepend country code
   if (digits.length >= 10 && digits.length <= 15) {
     return DEFAULT_COUNTRY_CODE + digits;
   }
-
-  // Fallback: return as-is
+  // Fallback
   return digits;
 }
 
-/**
- * Send a message via the Meta Cloud API.
- * @param {string} to - Recipient phone number in E.164 format
- * @param {string} body - Message text content
- * @returns {Promise<Object>} Result object
- */
-function sendViaApi(to, body) {
-  return new Promise((resolve) => {
-    const url = getBaseUrl();
-    const parsedUrl = new URL(url);
-    const data = JSON.stringify({
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to,
-      type: 'text',
-      text: { body },
-    });
+// ─── Console Mode ─────────────────────────────────────────────────────────────
 
-    const options = {
-      hostname: parsedUrl.hostname,
-      port: 443,
-      path: parsedUrl.pathname + parsedUrl.search,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data),
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let responseData = '';
-      res.on('data', (chunk) => (responseData += chunk));
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(responseData);
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve({ success: true, data: parsed, statusCode: res.statusCode });
-          } else {
-            // Extract the most descriptive error message from Meta's error object
-            const metaError = parsed?.error;
-            const errorDetail = metaError
-              ? `${metaError.message || ''}${metaError.error_user_title ? ` (${metaError.error_user_title})` : ''}${metaError.error_user_msg ? `: ${metaError.error_user_msg}` : ''}`.trim()
-              : JSON.stringify(parsed);
-            resolve({ success: false, error: errorDetail || `HTTP ${res.statusCode}`, data: parsed, statusCode: res.statusCode });
-          }
-        } catch (e) {
-          resolve({ success: false, error: `Parse error: ${e.message}`, raw: responseData, statusCode: res.statusCode });
-        }
-      });
-    });
-
-    req.on('error', (err) => {
-      resolve({ success: false, error: `Network error: ${err.message}` });
-    });
-
-    req.write(data);
-    req.end();
-  });
-}
-
-/**
- * Log a message to the console with a formatted prefix.
- * @param {string} to - Recipient phone number
- * @param {string} body - Message text content
- */
 function logToConsole(to, body) {
   console.log('─'.repeat(60));
   console.log(`📱 [WHATSAPP DEMO] To: ${to}`);
   console.log('─'.repeat(60));
   console.log(body);
   console.log('─'.repeat(60));
-  console.log(`(Messages are logged to console. Set WHATSAPP_MODE=live to send real messages.)`);
+  console.log(`(Set WHATSAPP_MODE=web and scan QR code to send real messages.)`);
   console.log('─'.repeat(60));
   console.log('');
 }
 
+// ─── Public API ───────────────────────────────────────────────────────────────
+
 /**
  * Send a WhatsApp message.
  *
- * In console mode, the message is logged to the console.
- * In live mode, the message is sent via the Meta Cloud API.
+ * In web mode, sends via whatsapp-web.js (requires QR scan on first run).
+ * In console mode, logs to the terminal (for testing).
  *
- * @param {string} to - Recipient phone number
- * @param {string} body - Message text
- * @returns {Promise<Object>} Result object with { success, data/error }
+ * @param {string} to - Recipient phone number (any common format)
+ * @param {string} body - Message text content
+ * @returns {Promise<{success: boolean, error?: string, mode?: string, to?: string}>}
  */
 async function sendMessage(to, body) {
   const formattedNumber = formatPhoneNumber(to);
-
   if (!formattedNumber) {
     console.warn(`[WHATSAPP] Cannot send message: invalid phone number "${to}"`);
     return { success: false, error: 'Invalid phone number' };
   }
 
-  if (MODE === MODE_LIVE) {
-    if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
-      console.error('[WHATSAPP] Live mode requires WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN env vars');
-      return { success: false, error: 'Missing WhatsApp configuration' };
+  if (MODE === MODE_WEB) {
+    // Check if client is ready
+    if (!client) {
+      return { success: false, error: 'WhatsApp client not initialized. Restart the server.' };
     }
-    console.log(`[WHATSAPP] Sending live message to ${formattedNumber}...`);
-    const result = await sendViaApi(formattedNumber, body);
-    if (result.success) {
-      console.log(`[WHATSAPP] Message sent successfully to ${formattedNumber}`);
-    } else {
-      console.error(`[WHATSAPP] Failed to send message to ${formattedNumber}:`, result.error || JSON.stringify(result.data));
+    if (!isReady) {
+      return {
+        success: false,
+        error: 'WhatsApp client not ready yet. Scan the QR code displayed in the server console.',
+      };
     }
-    return result;
+
+    try {
+      return await attemptSend(formattedNumber, body);
+    } catch (error) {
+      console.error(`[WHATSAPP] ✗ Failed to send message to ${formattedNumber}: ${error.message}`);
+      return { success: false, error: error.message };
+    }
   }
 
-  // Console mode (default)
+  // Console mode (default when WHATSAPP_MODE=console)
   logToConsole(formattedNumber, body);
   return { success: true, mode: 'console', to: formattedNumber };
 }
 
 /**
- * Get the current mode: 'console' or 'live'
+ * Attempt to send a message, with LID-safe WID resolution.
+ *
+ * WhatsApp's transition from JID (phone@c.us) to LID (Linked ID) means
+ * that sending to "phone@c.us" can fail because the library's internal
+ * getChat() can't resolve the JID to a LID.
+ *
+ * The fix: use client.getNumberId() first — it queries WhatsApp Web's
+ * QueryExist endpoint which properly resolves phone numbers to their
+ * current WID (whether @c.us or @lid). Then send to the resolved WID.
+ */
+async function attemptSend(formattedNumber, body) {
+  console.log(`[WHATSAPP] Sending message to ${formattedNumber}...`);
+
+  // Resolve the phone number to its current WhatsApp WID
+  // getNumberId() uses QueryExist internally, which properly handles LID resolution
+  let resolvedWid = null;
+  try {
+    resolvedWid = await client.getNumberId(formattedNumber);
+  } catch (resolveErr) {
+    console.warn(`[WHATSAPP] getNumberId() failed for ${formattedNumber}: ${resolveErr.message}`);
+  }
+
+  if (resolvedWid && resolvedWid._serialized) {
+    console.log(`[WHATSAPP] Resolved ${formattedNumber} → ${resolvedWid._serialized}`);
+  }
+
+  // Use resolved WID if available, otherwise fall back to JID format
+  const chatId = resolvedWid?._serialized || `${formattedNumber}@c.us`;
+
+  try {
+    const result = await client.sendMessage(chatId, body);
+    console.log(`[WHATSAPP] ✓ Message sent successfully to ${formattedNumber}`);
+    return { success: true, messageId: result?.id?._serialized || 'sent' };
+  } catch (error) {
+    // If the error is LID-related, try one more time with a fresh contact sync
+    const isLidError =
+      error.message?.includes('No LID for user') ||
+      error.message?.includes('Lid is missing') ||
+      error.message?.includes('asUserWidOrThrow') ||
+      error.message?.includes('toUserLidOrThrow');
+
+    if (isLidError) {
+      console.warn(`[WHATSAPP] LID error for ${formattedNumber}. Syncing contacts and retrying...`);
+      try {
+        await client.getContacts();
+        console.log('[WHATSAPP] Contacts synced, resolving number again...');
+        // Try resolving the number again after sync
+        const retryWid = await client.getNumberId(formattedNumber);
+        const retryChatId = retryWid?._serialized || `${formattedNumber}@c.us`;
+        if (retryWid) {
+          console.log(`[WHATSAPP] After sync, resolved ${formattedNumber} → ${retryChatId}`);
+        }          const result = await client.sendMessage(retryChatId, body);
+          console.log(`[WHATSAPP] ✓ Message sent successfully to ${formattedNumber} (after LID resolution)`);
+          return { success: true, messageId: result?.id?._serialized || 'sent' };
+        } catch (retryError) {
+        console.error(`[WHATSAPP] ✗ Retry also failed for ${formattedNumber}: ${retryError.message}`);
+        throw retryError;
+      }
+    }
+
+    // Not a LID error, throw as-is
+    throw error;
+  }
+}
+
+/**
+ * Get the current status of the WhatsApp service.
+ * @returns {string} Human-readable status description
  */
 function getMode() {
-  return MODE;
+  if (MODE === MODE_CONSOLE) return 'console';
+  if (isReady) return 'whatsapp-web (connected)';
+  if (client) return 'whatsapp-web (awaiting QR scan)';
+  return 'whatsapp-web (initializing)';
+}
+
+/**
+ * Check if the WhatsApp client is ready to send messages.
+ * @returns {boolean}
+ */
+function isClientReady() {
+  return MODE === MODE_WEB && client !== null && isReady;
+}
+
+/**
+ * Get the full connection details for the frontend.
+ * @returns {{ status: string, qrDataUrl: string|null, deviceName: string|null, phoneNumber: string|null, mode: string }}
+ */
+function getConnectionDetails() {
+  let status;
+  if (MODE !== MODE_WEB) {
+    status = 'console_mode';
+  } else if (isReady) {
+    status = 'connected';
+  } else if (connectionStatus === 'auth_failure') {
+    status = 'auth_failure';
+  } else if (connectionStatus === 'qr-ready' || latestQrDataUrl) {
+    status = 'qr_ready';
+  } else if (isInitialized) {
+    status = 'connecting';
+  } else {
+    status = 'disconnected';
+  }
+
+  return {
+    status,
+    mode: MODE,
+    qrDataUrl: latestQrDataUrl,
+    deviceName: connectedDeviceName,
+    phoneNumber: connectedPhoneNumber,
+    isConnected: isReady,
+  };
+}
+
+/**
+ * Reset the WhatsApp client connection (destroy + reinitialize).
+ * This forces a fresh QR code scan.
+ */
+function resetConnection() {
+  if (client) {
+    try {
+      client.destroy();
+    } catch (e) {
+      console.warn('[WHATSAPP] Error destroying client:', e.message);
+    }
+  }
+  client = null;
+  isReady = false;
+  isInitialized = false;
+  qrDisplayed = false;
+  initAttempts = 0;
+  latestQrDataUrl = null;
+  connectedDeviceName = null;
+  connectedPhoneNumber = null;
+  connectionStatus = 'disconnected';
+
+  // Small delay to allow cleanup
+  setTimeout(() => {
+    initializeClient();
+  }, 1000);
 }
 
 module.exports = {
   sendMessage,
   getMode,
+  isClientReady,
+  getConnectionDetails,
+  resetConnection,
   MODE_CONSOLE,
-  MODE_LIVE,
+  MODE_WEB,
 };

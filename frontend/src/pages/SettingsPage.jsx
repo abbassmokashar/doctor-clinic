@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
-import { settingsAPI, backupAPI } from '../services/api';
+import { settingsAPI, backupAPI, whatsappAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Settings,
   Palette,
   Users,
   Database,
+  Smartphone,
+  MessageCircle,
+  RefreshCw,
   Save,
   Loader2,
   Download,
@@ -20,12 +23,15 @@ import {
   X,
   Sun,
   Moon,
+  AlertCircle,
+  CheckCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const TABS = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { id: 'accounts', label: 'Accounts', icon: Users },
   { id: 'backup', label: 'Backup', icon: Database },
 ];
@@ -91,6 +97,7 @@ export default function SettingsPage() {
       <div>
         {activeTab === 'general' && <GeneralTab />}
         {activeTab === 'appearance' && <AppearanceTab />}
+        {activeTab === 'whatsapp' && <WhatsAppTab />}
         {activeTab === 'accounts' && <AccountsTab />}
         {activeTab === 'backup' && <BackupTab />}
       </div>
@@ -404,6 +411,283 @@ function AccountsTab() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WhatsAppTab() {
+  const [details, setDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const pollingRef = useRef(null);
+  const latestStatusRef = useRef(null);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await whatsappAPI.getStatus();
+      setDetails(res.data);
+      latestStatusRef.current = res.data.status;
+    } catch (err) {
+      console.error('Failed to fetch WhatsApp status:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+    // Poll every 5 seconds while waiting for QR scan
+    pollingRef.current = setInterval(() => {
+      const s = latestStatusRef.current;
+      if (s === 'connected' || s === 'console_mode' || s === 'auth_failure') return;
+      fetchStatus();
+    }, 5000);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [fetchStatus]);
+
+  const handleDisconnect = async () => {
+    if (!window.confirm('Are you sure you want to disconnect WhatsApp? You will need to scan the QR code again to reconnect.')) {
+      return;
+    }
+    setDisconnecting(true);
+    try {
+      await whatsappAPI.disconnect();
+      toast.success('WhatsApp disconnected. New QR code incoming...');
+      // Reset local state and start polling for new QR
+      setDetails({ status: 'disconnected', qrDataUrl: null, deviceName: null, phoneNumber: null, isConnected: false });
+      setTimeout(fetchStatus, 2000);
+    } catch (err) {
+      toast.error('Failed to disconnect WhatsApp');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--primary-600)' }} />
+      </div>
+    );
+  }
+
+  if (!details) {
+    return (
+      <div className="max-w-lg">
+        <div className="card p-8 text-center">
+          <AlertCircle className="w-10 h-10 mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
+          <p style={{ color: 'var(--text-muted)' }}>Unable to load WhatsApp status.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isConsole = details.mode === 'console';
+  const isConnected = details.status === 'connected';
+  const isQrReady = details.status === 'qr_ready';
+  const isAuthFailure = details.status === 'auth_failure';
+
+  return (
+    <div className="max-w-lg space-y-6">
+      {/* Connection Status Card */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-body)' }}>WhatsApp Connection</h2>
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
+            isConnected
+              ? 'bg-green-100 text-green-700'
+              : isQrReady
+              ? 'bg-amber-100 text-amber-700'
+              : isAuthFailure
+              ? 'bg-red-100 text-red-700'
+              : isConsole
+              ? 'bg-gray-100 text-gray-600'
+              : 'bg-blue-100 text-blue-600'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              isConnected ? 'bg-green-500 animate-pulse' :
+              isQrReady ? 'bg-amber-500 animate-pulse' :
+              isAuthFailure ? 'bg-red-500' :
+              isConsole ? 'bg-gray-400' :
+              'bg-blue-500'
+            }`} />
+            {isConnected ? 'Connected' :
+             isQrReady ? 'Awaiting Scan' :
+             isAuthFailure ? 'Auth Failed' :
+             isConsole ? 'Console Mode' :
+             details.status === 'connecting' ? 'Connecting...' :
+             'Disconnected'}
+          </span>
+        </div>
+
+        {/* Connected State */}
+        {isConnected && (
+          <div className="rounded-xl p-4 space-y-3" style={{
+            backgroundColor: 'var(--surface-alt)',
+            border: '1px solid var(--border)',
+          }}>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-100 text-green-600">
+                <CheckCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="font-medium" style={{ color: 'var(--text-body)' }}>
+                  {details.deviceName || 'WhatsApp'}
+                </p>
+                {details.phoneNumber && (
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    +{details.phoneNumber}
+                  </p>
+                )}
+              </div>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              WhatsApp is connected and ready to send appointment reminders.
+            </p>
+          </div>
+        )}
+
+        {/* QR Code State */}
+        {isQrReady && details.qrDataUrl && (
+          <div className="space-y-4">
+            <div className="rounded-xl p-4" style={{
+              backgroundColor: 'var(--surface-alt)',
+              border: '1px solid var(--border)',
+            }}>
+              {/* Instructions */}
+              <div className="flex items-start gap-3 mb-4">
+                <Smartphone className="w-5 h-5 mt-0.5 shrink-0" style={{ color: 'var(--primary-600)' }} />
+                <div>
+                  <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-body)' }}>
+                    Scan this QR code with your phone
+                  </p>
+                  <ol className="text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
+                    <li>1. Open <strong>WhatsApp</strong> on your phone</li>
+                    <li>2. Tap <strong>Menu</strong> (3 dots) or <strong>Settings</strong></li>
+                    <li>3. Go to <strong>Linked Devices</strong> → <strong>Link a Device</strong></li>
+                    <li>4. Point your camera at this QR code</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* QR Code */}
+              <div className="flex justify-center">
+                <div className="p-3 rounded-xl" style={{
+                  backgroundColor: 'white',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                }}>
+                  <img
+                    src={details.qrDataUrl}
+                    alt="WhatsApp QR Code"
+                    className="w-56 h-56"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-center mt-3" style={{ color: 'var(--text-muted)' }}>
+                QR code refreshes automatically. This page updates every 5 seconds.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Connecting State */}
+        {details.status === 'connecting' && (
+          <div className="rounded-xl p-6 text-center" style={{
+            backgroundColor: 'var(--surface-alt)',
+            border: '1px solid var(--border)',
+          }}>
+            <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin" style={{ color: 'var(--primary-600)' }} />
+            <p className="font-medium" style={{ color: 'var(--text-body)' }}>Connecting to WhatsApp...</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+              Initializing the WhatsApp Web client. A QR code will appear shortly.
+            </p>
+          </div>
+        )}
+
+        {/* Auth Failure */}
+        {isAuthFailure && (
+          <div className="rounded-xl p-4" style={{
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+          }}>
+            <div className="flex items-center gap-3 mb-2">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              <p className="font-medium text-red-700">Authentication Failed</p>
+            </div>
+            <p className="text-sm text-red-600">
+              The WhatsApp session is no longer valid. Click the button below to reset the connection and scan a new QR code.
+            </p>
+          </div>
+        )}
+
+        {/* Console Mode */}
+        {isConsole && (
+          <div className="rounded-xl p-4" style={{
+            backgroundColor: 'var(--surface-alt)',
+            border: '1px solid var(--border)',
+          }}>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              📋 WhatsApp is running in <strong>Console Mode</strong>. Messages will be logged to the server console instead of being sent.
+            </p>
+            <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+              Set <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--gray-200)', color: 'var(--text-body)' }}>WHATSAPP_MODE=web</code> in your <code>.env</code> file and restart to enable real WhatsApp messaging.
+            </p>
+          </div>
+        )}
+
+        {/* Disconnected (no QR yet) */}
+        {details.status === 'disconnected' && !isConsole && (
+          <div className="rounded-xl p-6 text-center" style={{
+            backgroundColor: 'var(--surface-alt)',
+            border: '1px solid var(--border)',
+          }}>
+            <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin" style={{ color: 'var(--primary-600)' }} />
+            <p style={{ color: 'var(--text-body)' }}>Reconnecting...</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+              The WhatsApp client is restarting. A QR code will appear here shortly.
+            </p>
+          </div>
+        )}
+
+        {/* Actions */}
+        {(isConnected || isQrReady || isAuthFailure) && (
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border-light)' }}>
+            <button
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="btn-secondary w-full"
+            >
+              {disconnecting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              {disconnecting ? 'Disconnecting...' : isConnected ? 'Disconnect & Re-scan QR' : 'Reset & Get New QR'}
+            </button>
+            <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-muted)' }}>
+              This will clear the current session and generate a fresh QR code.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Info Card */}
+      {!isConsole && (
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-body)' }}>About WhatsApp Integration</h3>
+          <ul className="text-xs space-y-1.5" style={{ color: 'var(--text-muted)' }}>
+            <li>• Uses <strong>whatsapp-web.js</strong> — connects via WhatsApp Web</li>
+            <li>• Session is persisted — you only scan the QR code once</li>
+            <li>• Appointment reminders are sent automatically at 9:00 AM daily</li>
+            <li>• You can also manually trigger reminders from the Appointments page</li>
+            <li>• Set <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--gray-200)' }}>WHATSAPP_MODE=console</code> in <code>.env</code> to test without real messages</li>
+          </ul>
         </div>
       )}
     </div>

@@ -149,6 +149,12 @@ export const settingsAPI = {
   updateUser: (id, data) => api.put(`/settings/users/${id}`, data),
 };
 
+// WhatsApp
+export const whatsappAPI = {
+  getStatus: () => api.get('/whatsapp/status'),
+  disconnect: () => api.post('/whatsapp/disconnect'),
+};
+
 // Backup
 export const backupAPI = {
   getInfo: () => api.get('/backup/info'),
