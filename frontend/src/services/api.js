@@ -152,7 +152,9 @@ export const settingsAPI = {
   getAll: () => api.get('/settings'),
   update: (data) => api.put('/settings', data),
   getUsers: () => api.get('/settings/users'),
+  createUser: (data) => api.post('/settings/users', data),
   updateUser: (id, data) => api.put(`/settings/users/${id}`, data),
+  deleteUser: (id) => api.delete(`/settings/users/${id}`),
   uploadLogo: (formData) => api.post('/settings/logo', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),

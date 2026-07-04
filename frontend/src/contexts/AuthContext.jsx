@@ -112,13 +112,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const isAuthenticated = !!user;
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
+  const isSuperadmin = user?.role === 'SUPERADMIN';
   const isDoctor = user?.role === 'DOCTOR';
   const isReceptionist = user?.role === 'RECEPTIONIST';
 
   return (
     <AuthContext.Provider
-      value={{ user, login, logout, loading, isAuthenticated, isAdmin, isDoctor, isReceptionist }}
+      value={{ user, login, logout, loading, isAuthenticated, isAdmin, isSuperadmin, isDoctor, isReceptionist }}
     >
       {/* Inactivity warning banner */}
       {showExpiryWarning && (

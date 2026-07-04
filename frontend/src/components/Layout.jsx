@@ -41,6 +41,8 @@ export default function Layout() {
 
   const navItems = useMemo(() => {
     if (!user) return [];
+    // SUPERADMIN can see all navigation items
+    if (user.role === 'SUPERADMIN') return allNavItems;
     return allNavItems.filter((item) => item.roles.includes(user.role));
   }, [user]);
 
@@ -118,7 +120,14 @@ export default function Layout() {
                   {user?.name?.charAt(0) || 'U'}
                 </div>
                 <div className="flex-1 text-left min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-2">
+                    {user?.name}
+                    {user?.role === 'SUPERADMIN' && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                        Superadmin
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-gray-500 truncate">{user?.role}</p>
                 </div>
                 <ChevronDown className="w-4 h-4 text-gray-400" />

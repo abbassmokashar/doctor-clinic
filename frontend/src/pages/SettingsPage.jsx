@@ -18,9 +18,12 @@ import {
   XCircle,
   Shield,
   UserCog,
+  UserPlus,
   Search,
   Check,
   X,
+  Eye,
+  EyeOff,
   Sun,
   Moon,
   AlertCircle,
@@ -43,8 +46,7 @@ const ROLES = ['ADMIN', 'DOCTOR', 'RECEPTIONIST'];
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'ADMIN';
+  const { user, isAdmin } = useAuth();
 
   if (!isAdmin) {
     return (
@@ -539,11 +541,21 @@ function AppearanceTab() {
 }
 
 function AccountsTab() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', role: '', password: '' });
   const [search, setSearch] = useState('');
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', email: '', password: '', role: 'DOCTOR', phone: '' });
+  const [creating, setCreating] = useState(false);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  const isOwnAccount = (userId) => currentUser?.id === userId;
 
   const fetchUsers = () => {
     setLoading(true);
@@ -561,7 +573,7 @@ function AccountsTab() {
       toast.success(`User ${user.isActive ? 'deactivated' : 'activated'}`);
       fetchUsers();
     } catch (error) {
-      toast.error('Failed to update user');
+      toast.error(error.response?.data?.message || 'Failed to update user');
     }
   };
 
@@ -572,7 +584,11 @@ function AccountsTab() {
 
   const handleSaveEdit = async () => {
     try {
-      const data = { name: editForm.name, email: editForm.email, role: editForm.role };
+      const data = { name: editForm.name, email: editForm.email };
+      // Don't send role when editing your own account (backend blocks it)
+      if (!isOwnAccount(editingUser)) {
+        data.role = editForm.role;
+      }
       if (editForm.password) data.password = editForm.password;
       await settingsAPI.updateUser(editingUser, data);
       toast.success('User updated');
@@ -580,6 +596,42 @@ function AccountsTab() {
       fetchUsers();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to update user');
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    setDeleting(userId);
+    try {
+      await settingsAPI.deleteUser(userId);
+      toast.success('User deleted successfully');
+      // If we were editing this user, cancel edit mode
+      if (editingUser === userId) {
+        setEditingUser(null);
+      }
+      fetchUsers();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete user');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleCreateUser = async () => {
+    if (!createForm.name.trim() || !createForm.email.trim() || !createForm.password.trim()) {
+      toast.error('Name, email, and password are required.');
+      return;
+    }
+    setCreating(true);
+    try {
+      await settingsAPI.createUser(createForm);
+      toast.success('User created successfully');
+      setShowCreateModal(false);
+      setCreateForm({ name: '', email: '', password: '', role: 'DOCTOR', phone: '' });
+      fetchUsers();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to create user');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -592,7 +644,15 @@ function AccountsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Manage user accounts, roles, and access.</p>
-        <div className="relative max-w-xs">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary text-sm"
+          >
+            <UserPlus className="w-4 h-4" />
+            Create User
+          </button>
+          <div className="relative max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
           <input
             type="text"
@@ -602,6 +662,7 @@ function AccountsTab() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+      </div>
       </div>
 
       {loading ? (
@@ -636,15 +697,30 @@ function AccountsTab() {
                             onChange={(e) => setEditForm({...editForm, email: e.target.value})} />
                         </td>
                         <td className="px-5 py-2">
-                          <select className="input text-sm py-1" value={editForm.role}
-                            onChange={(e) => setEditForm({...editForm, role: e.target.value})}>
-                            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                          </select>
+                          {isOwnAccount(user.id) ? (
+                            <span className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>{editForm.role}</span>
+                          ) : (
+                            <select className="input text-sm py-1" value={editForm.role}
+                              onChange={(e) => setEditForm({...editForm, role: e.target.value})}>
+                              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          )}
                         </td>
                         <td className="px-5 py-2">
-                          <input className="input text-sm py-1" type="password" value={editForm.password}
-                            onChange={(e) => setEditForm({...editForm, password: e.target.value})}
-                            placeholder="New password" />
+                          <div className="relative">
+                            <input className="input text-sm py-1 w-full pr-8" type={showEditPassword ? 'text' : 'password'} value={editForm.password}
+                              onChange={(e) => setEditForm({...editForm, password: e.target.value})}
+                              placeholder="New password" />
+                            {editForm.password && (
+                              <button
+                                type="button"
+                                onClick={() => setShowEditPassword(!showEditPassword)}
+                                className="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600"
+                              >
+                                {showEditPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-5 py-2" style={{ color: 'var(--text-muted)' }}>-</td>
                         <td className="px-5 py-2">
@@ -685,12 +761,23 @@ function AccountsTab() {
                             <button onClick={() => handleEdit(user)} className="btn-sm btn-secondary">
                               <UserCog className="w-3 h-3" /> Edit
                             </button>
-                            <button
-                              onClick={() => handleToggleActive(user)}
-                              className={`btn-sm ${user.isActive ? 'btn-danger' : 'btn-primary'}`}
-                            >
-                              {user.isActive ? 'Deactivate' : 'Activate'}
-                            </button>
+                            {!isOwnAccount(user.id) && (
+                              <button
+                                onClick={() => handleToggleActive(user)}
+                                className={`btn-sm ${user.isActive ? 'btn-danger' : 'btn-primary'}`}
+                              >
+                                {user.isActive ? 'Deactivate' : 'Activate'}
+                              </button>
+                            )}
+                            {!isOwnAccount(user.id) && (
+                              <button
+                                onClick={() => setConfirmDeleteUser({ id: user.id, name: user.name })}
+                                disabled={deleting === user.id}
+                                className="btn-sm btn-danger"
+                              >
+                                {deleting === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </>
@@ -701,6 +788,156 @@ function AccountsTab() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteUser && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setConfirmDeleteUser(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-100 text-red-600 shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold" style={{ color: 'var(--text-body)' }}>Delete User</h3>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Are you sure you want to delete <strong>{confirmDeleteUser.name}</strong>?
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg p-3 text-sm bg-red-50 border border-red-200 text-red-700">
+                <p className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  This action cannot be undone. All associated data will be permanently removed.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setConfirmDeleteUser(null)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const user = confirmDeleteUser;
+                    setConfirmDeleteUser(null);
+                    handleDeleteUser(user.id);
+                  }}
+                  disabled={deleting === confirmDeleteUser.id}
+                  className="btn-danger"
+                >
+                  {deleting === confirmDeleteUser.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {deleting === confirmDeleteUser.id ? 'Deleting...' : 'Delete User'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setShowCreateModal(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold" style={{ color: 'var(--text-body)' }}>Create New User</h3>
+                <button onClick={() => setShowCreateModal(false)} className="p-1 rounded-lg hover:bg-gray-100">
+                  <X className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Name</label>
+                  <input
+                    type="text"
+                    className="input w-full"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({...createForm, name: e.target.value})}
+                    placeholder="Full name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Email</label>
+                  <input
+                    type="email"
+                    className="input w-full"
+                    value={createForm.email}
+                    onChange={(e) => setCreateForm({...createForm, email: e.target.value})}
+                    placeholder="email@clinic.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Password</label>
+                  <div className="relative">
+                    <input
+                      type={showCreatePassword ? 'text' : 'password'}
+                      className="input w-full pr-10"
+                      value={createForm.password}
+                      onChange={(e) => setCreateForm({...createForm, password: e.target.value})}
+                      placeholder="Password"
+                    />
+                    {createForm.password && (
+                      <button
+                        type="button"
+                        onClick={() => setShowCreatePassword(!showCreatePassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                      >
+                        {showCreatePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Role</label>
+                  <select
+                    className="input w-full"
+                    value={createForm.role}
+                    onChange={(e) => setCreateForm({...createForm, role: e.target.value})}
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Phone (optional)</label>
+                  <input
+                    type="text"
+                    className="input w-full"
+                    value={createForm.phone}
+                    onChange={(e) => setCreateForm({...createForm, phone: e.target.value})}
+                    placeholder="+1-555-0000"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateUser}
+                  disabled={creating}
+                  className="btn-primary"
+                >
+                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                  {creating ? 'Creating...' : 'Create User'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

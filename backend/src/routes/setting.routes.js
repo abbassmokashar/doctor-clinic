@@ -73,8 +73,10 @@ const faviconUpload = multer({
 router.post('/favicon', authenticate, authorize('ADMIN'), faviconUpload.single('favicon'), settingController.uploadFavicon);
 router.delete('/favicon', authenticate, authorize('ADMIN'), settingController.removeFavicon);
 
-// User management (admin only)
+// User management (admin/superadmin only)
 router.get('/users', authenticate, authorize('ADMIN'), settingController.getUsers);
+router.post('/users', authenticate, authorize('ADMIN'), settingController.createUser);
 router.put('/users/:id', authenticate, authorize('ADMIN'), settingController.updateUser);
+router.delete('/users/:id', authenticate, authorize('ADMIN'), settingController.deleteUser);
 
 module.exports = router;

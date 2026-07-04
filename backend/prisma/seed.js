@@ -21,6 +21,21 @@ async function main() {
   });
   console.log('Created admin user:', admin.email);
 
+  // Create superadmin user (cannot be created through the app)
+  const superadminPassword = await bcrypt.hash('superadmin123', 12);
+  const superadmin = await prisma.user.upsert({
+    where: { email: 'superadmin@clinic.com' },
+    update: {},
+    create: {
+      email: 'superadmin@clinic.com',
+      password: superadminPassword,
+      name: 'Super Admin',
+      role: 'SUPERADMIN',
+      phone: '+1-555-0000',
+    },
+  });
+  console.log('Created superadmin user:', superadmin.email);
+
   // Create doctors
   const doctorPassword = await bcrypt.hash('doctor123', 12);
   const doctorsData = [
@@ -290,9 +305,10 @@ async function main() {
 
   console.log('\n✅ Seeding completed successfully!');
   console.log('\nLogin Credentials:');
-  console.log('  Admin:        admin@clinic.com / admin123');
+  console.log('  Superadmin:  superadmin@clinic.com / superadmin123');
+  console.log('  Admin:       admin@clinic.com / admin123');
   console.log('  Receptionist: reception@clinic.com / reception123');
-  console.log('  Doctor:       sarah.johnson@clinic.com / doctor123');
+  console.log('  Doctor:      sarah.johnson@clinic.com / doctor123');
   console.log('  (All doctors use: doctor123)');
 }
 

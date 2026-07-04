@@ -18,6 +18,11 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ message: 'Email already registered.' });
     }
 
+    // Prevent creating SUPERADMIN users through registration
+    if (role === 'SUPERADMIN') {
+      return res.status(403).json({ message: 'Cannot create SUPERADMIN accounts through registration.' });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 12);
 
     const user = await req.prisma.user.create({
