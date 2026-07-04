@@ -13,8 +13,8 @@ exports.getAll = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const updates = req.body; // { appName: "...", colorTheme: "..." }
-    const allowedKeys = ['appName', 'colorTheme'];
+    const updates = req.body; // { appName: "...", colorTheme: "...", logoUrl: "...", logoStyle: "..." }
+    const allowedKeys = ['appName', 'colorTheme', 'logoUrl', 'logoStyle', 'faviconUrl'];
 
     for (const key of Object.keys(updates)) {
       if (!allowedKeys.includes(key)) continue;
@@ -30,6 +30,91 @@ exports.update = async (req, res, next) => {
     const map = {};
     settings.forEach((s) => { map[s.key] = s.value; });
     res.json(map);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Logo upload
+exports.uploadLogo = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded.' });
+    }
+
+    const logoUrl = `/uploads/logo/${req.file.filename}`;
+
+    // Save logoUrl setting
+    await req.prisma.setting.upsert({
+      where: { key: 'logoUrl' },
+      update: { value: logoUrl },
+      create: { key: 'logoUrl', value: logoUrl },
+    });
+
+    // Also set logoStyle to 'image' when uploading
+    await req.prisma.setting.upsert({
+      where: { key: 'logoStyle' },
+      update: { value: 'image' },
+      create: { key: 'logoStyle', value: 'image' },
+    });
+
+    res.json({ logoUrl, logoStyle: 'image', message: 'Logo uploaded successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Favicon upload
+exports.uploadFavicon = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded.' });
+    }
+
+    const faviconUrl = `/uploads/favicon/${req.file.filename}`;
+
+    await req.prisma.setting.upsert({
+      where: { key: 'faviconUrl' },
+      update: { value: faviconUrl },
+      create: { key: 'faviconUrl', value: faviconUrl },
+    });
+
+    res.json({ faviconUrl, message: 'Favicon uploaded successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Remove favicon (revert to default)
+exports.removeFavicon = async (req, res, next) => {
+  try {
+    await req.prisma.setting.upsert({
+      where: { key: 'faviconUrl' },
+      update: { value: '' },
+      create: { key: 'faviconUrl', value: '' },
+    });
+
+    res.json({ message: 'Favicon removed. Using default icon.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Remove logo (revert to icon+text)
+exports.removeLogo = async (req, res, next) => {
+  try {
+    await req.prisma.setting.upsert({
+      where: { key: 'logoUrl' },
+      update: { value: '' },
+      create: { key: 'logoUrl', value: '' },
+    });
+    await req.prisma.setting.upsert({
+      where: { key: 'logoStyle' },
+      update: { value: 'icon' },
+      create: { key: 'logoStyle', value: 'icon' },
+    });
+
+    res.json({ message: 'Logo removed. Using default icon.' });
   } catch (error) {
     next(error);
   }

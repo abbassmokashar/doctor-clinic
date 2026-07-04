@@ -420,6 +420,8 @@ export default function PatientDetailPage() {
                 <tr className="text-left text-gray-500 border-b border-gray-100">
                   <th className="pb-3 font-medium">ID</th>
                   <th className="pb-3 font-medium">Amount</th>
+                  <th className="pb-3 font-medium">Paid</th>
+                  <th className="pb-3 font-medium">Plan</th>
                   <th className="pb-3 font-medium">Status</th>
                   <th className="pb-3 font-medium">Date</th>
                 </tr>
@@ -429,10 +431,21 @@ export default function PatientDetailPage() {
                   <tr key={inv.id} className="border-b border-gray-50">
                     <td className="py-2 text-gray-900">#{inv.id}</td>
                     <td className="py-2 font-medium">${inv.amount.toFixed(2)}</td>
+                    <td className="py-2 text-gray-600">
+                      {inv.paidAmount > 0 ? `$${inv.paidAmount.toFixed(2)}` : '-'}
+                    </td>
+                    <td className="py-2">
+                      {inv.isInstallment ? (
+                        <span className="text-xs text-blue-600 font-medium">Installment</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">One-time</span>
+                      )}
+                    </td>
                     <td className="py-2">
                       <span className={`badge ${
                         inv.status === 'PAID' ? 'bg-green-100 text-green-700' :
                         inv.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                        inv.status === 'PARTIALLY_PAID' ? 'bg-blue-100 text-blue-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>{inv.status.replace('_', ' ')}</span>
                     </td>

@@ -36,7 +36,7 @@ exports.getStatus = async (req, res, next) => {
  */
 exports.disconnect = async (req, res, next) => {
   try {
-    whatsappService.resetConnection();
+    await whatsappService.resetConnection();
     res.json({
       message: 'WhatsApp client has been reset. A new QR code will be generated shortly.',
       timestamp: new Date().toISOString(),

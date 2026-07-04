@@ -11,7 +11,7 @@ import {
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
-  const { appName } = useTheme();
+  const { appName, logoUrl, logoStyle } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -40,9 +40,17 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-blue-50 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-600 text-white mb-4 shadow-lg shadow-primary-200">
-            <Stethoscope className="w-8 h-8" />
-          </div>
+          {logoUrl && logoStyle === 'image' ? (
+            <img
+              src={logoUrl}
+              alt={appName}
+              className="h-20 w-auto mx-auto mb-4 object-contain"
+            />
+          ) : (
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-600 text-white mb-4 shadow-lg shadow-primary-200">
+              <Stethoscope className="w-8 h-8" />
+            </div>
+          )}
           <h1 className="text-2xl font-bold text-gray-900">{appName}</h1>
           <p className="text-gray-500 mt-1">Sign in to your account</p>
         </div>
@@ -92,15 +100,6 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-
-          <div className="mt-6 pt-6 border-t border-gray-100">
-            <p className="text-xs text-gray-400 text-center mb-3">Demo Credentials</p>
-            <div className="space-y-1.5 text-xs text-gray-500">
-              <p><span className="font-medium text-gray-700">Admin:</span> admin@clinic.com / admin123</p>
-              <p><span className="font-medium text-gray-700">Doctor:</span> sarah.johnson@clinic.com / doctor123</p>
-              <p><span className="font-medium text-gray-700">Reception:</span> reception@clinic.com / reception123</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>

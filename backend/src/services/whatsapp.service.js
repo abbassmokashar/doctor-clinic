@@ -13,6 +13,8 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
+const fs = require('fs');
+const path = require('path');
 
 // ─── Mode Configuration ───────────────────────────────────────────────────────
 
@@ -26,6 +28,7 @@ const MODE = (process.env.WHATSAPP_MODE || MODE_WEB).toLowerCase();
 let client = null;
 let isReady = false;
 let isInitialized = false;
+let isManualReset = false;
 let qrDisplayed = false;
 let initAttempts = 0;
 const MAX_INIT_ATTEMPTS = 3;
@@ -46,6 +49,7 @@ function initializeClient() {
     console.error('[WHATSAPP] Max initialization attempts reached. Please restart the server.');
     return;
   }
+  isManualReset = false;
   isInitialized = true;
   initAttempts++;
 
@@ -153,6 +157,14 @@ function initializeClient() {
     connectedDeviceName = null;
     connectedPhoneNumber = null;
     latestQrDataUrl = null;
+
+    // If this disconnect was triggered by a manual reset, skip auto-reconnect —
+    // resetConnection() already handles the reinitialization
+    if (isManualReset) {
+      console.log('[WHATSAPP] Manual reset in progress — skipping auto-reconnect.');
+      return;
+    }
+
     console.warn('');
     console.warn(`⚠️ [WHATSAPP] Disconnected: ${reason}`);
     console.warn('   Reconnecting in 10 seconds...');
@@ -396,14 +408,40 @@ function getConnectionDetails() {
  * Reset the WhatsApp client connection (destroy + reinitialize).
  * This forces a fresh QR code scan.
  */
-function resetConnection() {
+async function resetConnection() {
+  // Signal that this is a manual reset so the disconnected event handler
+  // does not attempt its own auto-reconnect
+  isManualReset = true;
+
   if (client) {
     try {
-      client.destroy();
+      // client.destroy() closes the Puppeteer browser — this is async.
+      // We MUST await it so Chrome finishes flushing session data to disk
+      // before we delete the auth directory. Otherwise Chrome could recreate
+      // the session files after we've deleted them.
+      await Promise.race([
+        client.destroy(),
+        new Promise(resolve => setTimeout(resolve, 10000)), // safety timeout
+      ]);
     } catch (e) {
       console.warn('[WHATSAPP] Error destroying client:', e.message);
     }
   }
+
+  // Extra wait to ensure Chrome has fully flushed any pending writes
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Clear the LocalAuth session data so the next initialization generates a fresh QR code
+  const authDir = path.join(__dirname, '../../.wwebjs_auth');
+  if (fs.existsSync(authDir)) {
+    try {
+      fs.rmSync(authDir, { recursive: true, force: true });
+      console.log('[WHATSAPP] ✓ LocalAuth session data cleared.');
+    } catch (e) {
+      console.warn('[WHATSAPP] Error clearing LocalAuth session:', e.message);
+    }
+  }
+
   client = null;
   isReady = false;
   isInitialized = false;
@@ -414,7 +452,7 @@ function resetConnection() {
   connectedPhoneNumber = null;
   connectionStatus = 'disconnected';
 
-  // Small delay to allow cleanup
+  // Reinitialize the client — with the auth data gone, it will generate a new QR code
   setTimeout(() => {
     initializeClient();
   }, 1000);

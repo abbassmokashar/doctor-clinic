@@ -237,6 +237,57 @@ async function main() {
   }
   console.log('Created sample invoices');
 
+  // Create an installment plan invoice
+  const installmentPatient = patients[3]; // Maria Garcia
+  const installmentBaseDate = new Date();
+  installmentBaseDate.setMonth(installmentBaseDate.getMonth() + 1);
+
+  const installmentInvoice = await prisma.invoice.create({
+    data: {
+      patientId: installmentPatient.id,
+      amount: 600,
+      description: 'Dental treatment plan - crowns and cleaning',
+      status: 'PARTIALLY_PAID',
+      isInstallment: true,
+      totalInstallments: 3,
+      dueDate: installmentBaseDate,
+      paidAmount: 200,
+    },
+  });
+
+  // Create installments for it
+  await prisma.installment.createMany({
+    data: [
+      {
+        invoiceId: installmentInvoice.id,
+        amount: 200,
+        dueDate: new Date(installmentBaseDate),
+        status: 'PAID',
+        paidAmount: 200,
+        paidAt: new Date(),
+        orderIndex: 1,
+        notes: 'Installment 1 of 3',
+      },
+      {
+        invoiceId: installmentInvoice.id,
+        amount: 200,
+        dueDate: new Date(installmentBaseDate.getFullYear(), installmentBaseDate.getMonth() + 1, installmentBaseDate.getDate()),
+        status: 'PENDING',
+        orderIndex: 2,
+        notes: 'Installment 2 of 3',
+      },
+      {
+        invoiceId: installmentInvoice.id,
+        amount: 200,
+        dueDate: new Date(installmentBaseDate.getFullYear(), installmentBaseDate.getMonth() + 2, installmentBaseDate.getDate()),
+        status: 'PENDING',
+        orderIndex: 3,
+        notes: 'Installment 3 of 3',
+      },
+    ],
+  });
+  console.log('Created sample installment plan invoice');
+
   console.log('\n✅ Seeding completed successfully!');
   console.log('\nLogin Credentials:');
   console.log('  Admin:        admin@clinic.com / admin123');

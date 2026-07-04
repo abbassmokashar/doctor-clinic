@@ -36,7 +36,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const { user, logout } = useAuth();
-  const { appName } = useTheme();
+  const { appName, logoUrl, logoStyle } = useTheme();
   const navigate = useNavigate();
 
   const navItems = useMemo(() => {
@@ -68,9 +68,17 @@ export default function Layout() {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-200">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary-600 text-white">
-              <Stethoscope className="w-6 h-6" />
-            </div>
+            {logoUrl && logoStyle === 'image' ? (
+              <img
+                src={logoUrl}
+                alt="Logo"
+                className="h-10 w-auto object-contain rounded-lg"
+              />
+            ) : (
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary-600 text-white shrink-0">
+                <Stethoscope className="w-6 h-6" />
+              </div>
+            )}
             <div>
               <h1 className="text-lg font-bold text-gray-900">{appName}</h1>
               <p className="text-xs text-gray-500">Management System</p>

@@ -25,6 +25,9 @@ import {
   Moon,
   AlertCircle,
   CheckCheck,
+  Image,
+  Trash2,
+  Stethoscope,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -106,9 +109,13 @@ export default function SettingsPage() {
 }
 
 function GeneralTab() {
-  const { appName, setAppName } = useTheme();
+  const { appName, setAppName, logoUrl, setLogoUrl, logoStyle, setLogoStyle, faviconUrl, setFaviconUrl } = useTheme();
   const [name, setName] = useState(appName);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
+  const fileInputRef = useRef(null);
+  const faviconInputRef = useRef(null);
 
   useEffect(() => { setName(appName); }, [appName]);
 
@@ -123,8 +130,81 @@ function GeneralTab() {
     toast.success('App name updated');
   };
 
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Logo must be less than 2MB');
+      e.target.value = '';
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      const res = await settingsAPI.uploadLogo(formData);
+      setLogoUrl(res.data.logoUrl);
+      setLogoStyle('image');
+      toast.success('Logo uploaded successfully');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to upload logo');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    try {
+      await settingsAPI.removeLogo();
+      setLogoUrl('');
+      setLogoStyle('icon');
+      toast.success('Logo removed. Using default icon.');
+    } catch (error) {
+      toast.error('Failed to remove logo');
+    }
+  };
+
+  const handleFaviconUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 1 * 1024 * 1024) {
+      toast.error('Favicon must be less than 1MB');
+      e.target.value = '';
+      return;
+    }
+
+    setUploadingFavicon(true);
+    try {
+      const formData = new FormData();
+      formData.append('favicon', file);
+      const res = await settingsAPI.uploadFavicon(formData);
+      setFaviconUrl(res.data.faviconUrl);
+      toast.success('Favicon uploaded successfully');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to upload favicon');
+    } finally {
+      setUploadingFavicon(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveFavicon = async () => {
+    try {
+      await settingsAPI.removeFavicon();
+      setFaviconUrl('');
+      toast.success('Favicon removed. Using default icon.');
+    } catch (error) {
+      toast.error('Failed to remove favicon');
+    }
+  };
+
   return (
     <div className="max-w-lg space-y-6">
+      {/* Clinic Name */}
       <div className="card p-5">
         <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Clinic Name</h2>
         <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
@@ -146,6 +226,215 @@ function GeneralTab() {
         <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
           Current name: <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>{appName}</span>
         </p>
+      </div>
+
+      {/* Logo Settings */}
+      <div className="card p-5">
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Logo</h2>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          Upload an image logo or use the default icon with your clinic name.
+        </p>
+
+        {/* Logo Style Toggle */}
+        <div className="flex gap-3 mb-4">
+          <button
+            type="button"
+            onClick={() => setLogoStyle('icon')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all ${
+              logoStyle === 'icon' || !logoUrl
+                ? 'border-primary-500 bg-primary-50 text-primary-700'
+                : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+            }`}
+          >
+            <Stethoscope className="w-4 h-4" />
+            <span className="font-medium text-sm">Icon + Text</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (logoUrl) setLogoStyle('image');
+            }}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all ${
+              logoStyle === 'image' && logoUrl
+                ? 'border-primary-500 bg-primary-50 text-primary-700'
+                : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+            } ${!logoUrl ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <Image className="w-4 h-4" />
+            <span className="font-medium text-sm">Image Logo</span>
+          </button>
+        </div>
+
+        {/* Current Logo Preview - clickable to upload/replace */}
+        <div
+          className="rounded-xl p-6 mb-4 flex items-center justify-center border-2 border-dashed cursor-pointer hover:border-primary-400 transition-colors group"
+          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface-alt)' }}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {logoUrl && logoStyle === 'image' ? (
+            <div className="relative">
+              <img
+                src={logoUrl}
+                alt="Clinic Logo"
+                className="max-h-24 max-w-48 object-contain rounded-lg group-hover:opacity-80 transition-opacity"
+              />
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <Upload className="w-3 h-3" />
+                  Click to replace
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2 text-center group-hover:opacity-70 transition-opacity">
+              <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-primary-600 text-white">
+                <Stethoscope className="w-8 h-8" />
+              </div>
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'var(--text-body)' }}>{appName}</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Management System</p>
+              </div>
+              {!logoUrl && (
+                <span className="text-xs text-primary-600 font-medium flex items-center gap-1">
+                  <Upload className="w-3 h-3" />
+                  Click to upload a logo
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Upload & Remove Buttons */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="btn-primary flex-1"
+          >
+            {uploading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Upload className="w-4 h-4" />
+            )}
+            {uploading ? 'Uploading...' : 'Upload Logo'}
+          </button>
+          {logoUrl && (
+            <button onClick={handleRemoveLogo} className="btn-secondary">
+              <Trash2 className="w-4 h-4" />
+              Remove
+            </button>
+          )}
+        </div>
+        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+          Supported: PNG, JPG, GIF, SVG, WEBP (max 2MB)
+        </p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".png,.jpg,.jpeg,.gif,.svg,.webp"
+          className="hidden"
+          onChange={handleLogoUpload}
+        />
+      </div>
+
+      {/* Favicon Settings */}
+      <div className="card p-5">
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Browser Tab Icon (Favicon)</h2>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          Upload a small icon that appears in the browser tab next to the page title.
+        </p>
+
+        {/* Current Favicon Preview */}
+        <div className="flex items-center gap-4 mb-4">
+          <div
+            className="flex items-center justify-center w-12 h-12 rounded-xl border-2 border-dashed cursor-pointer hover:border-primary-400 transition-colors group relative overflow-hidden"
+            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface-alt)' }}
+            onClick={() => faviconInputRef.current?.click()}
+          >
+            {faviconUrl ? (
+              <img
+                src={faviconUrl}
+                alt="Favicon"
+                className="w-8 h-8 object-contain group-hover:opacity-60 transition-opacity"
+              />
+            ) : (
+              <span className="text-lg group-hover:opacity-60 transition-opacity">🏥</span>
+            )}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+              <Upload className="w-4 h-4 text-white" />
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'var(--text-body)' }}>
+              {faviconUrl ? 'Custom favicon' : 'Default favicon'}
+            </p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {faviconUrl ? 'Click the icon to replace' : 'Click to upload a custom favicon'}
+            </p>
+          </div>
+        </div>
+
+        {/* Upload & Remove Buttons */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => faviconInputRef.current?.click()}
+            disabled={uploadingFavicon}
+            className="btn-primary"
+          >
+            {uploadingFavicon ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Upload className="w-4 h-4" />
+            )}
+            {uploadingFavicon ? 'Uploading...' : 'Upload Favicon'}
+          </button>
+          {faviconUrl && (
+            <button onClick={handleRemoveFavicon} className="btn-secondary">
+              <Trash2 className="w-4 h-4" />
+              Remove
+            </button>
+          )}
+        </div>
+        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+          Supported: PNG, JPG, GIF, SVG, WEBP, ICO (max 1MB). Square images work best.
+        </p>
+        <input
+          ref={faviconInputRef}
+          type="file"
+          accept=".png,.jpg,.jpeg,.gif,.svg,.webp,.ico"
+          className="hidden"
+          onChange={handleFaviconUpload}
+        />
+      </div>
+
+      {/* Preview Card */}
+      <div className="card p-5">
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Preview</h2>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          This is how your branding will appear in the sidebar.
+        </p>
+        <div
+          className="rounded-xl border p-4"
+          style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}
+        >
+          <div className="flex items-center gap-3">
+            {logoUrl && logoStyle === 'image' ? (
+              <img
+                src={logoUrl}
+                alt="Logo"
+                className="h-10 w-auto object-contain rounded-lg"
+              />
+            ) : (
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary-600 text-white shrink-0">
+                <Stethoscope className="w-6 h-6" />
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-bold" style={{ color: 'var(--text-body)' }}>{appName}</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Management System</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -676,20 +965,6 @@ function WhatsAppTab() {
           </div>
         )}
       </div>
-
-      {/* Info Card */}
-      {!isConsole && (
-        <div className="card p-5">
-          <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-body)' }}>About WhatsApp Integration</h3>
-          <ul className="text-xs space-y-1.5" style={{ color: 'var(--text-muted)' }}>
-            <li>• Uses <strong>whatsapp-web.js</strong> — connects via WhatsApp Web</li>
-            <li>• Session is persisted — you only scan the QR code once</li>
-            <li>• Appointment reminders are sent automatically at 9:00 AM daily</li>
-            <li>• You can also manually trigger reminders from the Appointments page</li>
-            <li>• Set <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--gray-200)' }}>WHATSAPP_MODE=console</code> in <code>.env</code> to test without real messages</li>
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

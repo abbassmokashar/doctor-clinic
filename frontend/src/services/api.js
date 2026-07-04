@@ -120,6 +120,12 @@ export const invoiceAPI = {
   markPaid: (id, data) => api.patch(`/invoices/${id}/pay`, data),
 };
 
+// Installments
+export const installmentAPI = {
+  getByInvoice: (invoiceId) => api.get(`/installments/invoice/${invoiceId}`),
+  markPaid: (id, data) => api.patch(`/installments/${id}/pay`, data),
+};
+
 // Medical Tests
 export const medicalTestAPI = {
   getByPatient: (patientId) => api.get(`/medical-tests/patient/${patientId}`),
@@ -147,6 +153,14 @@ export const settingsAPI = {
   update: (data) => api.put('/settings', data),
   getUsers: () => api.get('/settings/users'),
   updateUser: (id, data) => api.put(`/settings/users/${id}`, data),
+  uploadLogo: (formData) => api.post('/settings/logo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  removeLogo: () => api.delete('/settings/logo'),
+  uploadFavicon: (formData) => api.post('/settings/favicon', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  removeFavicon: () => api.delete('/settings/favicon'),
 };
 
 // WhatsApp
