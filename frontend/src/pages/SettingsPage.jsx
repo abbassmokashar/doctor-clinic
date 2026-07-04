@@ -1208,19 +1208,44 @@ function WhatsAppTab() {
 
 function BackupTab() {
   const [dbInfo, setDbInfo] = useState(null);
+  const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [restoringId, setRestoringId] = useState(null);
+  const [confirmRestore, setConfirmRestore] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const fileInputRef = useRef(null);
 
-  const fetchDbInfo = () => {
-    backupAPI.getInfo()
-      .then((res) => setDbInfo(res.data))
+  const fetchData = () => {
+    Promise.all([
+      backupAPI.getInfo(),
+      backupAPI.getList(),
+    ])
+      .then(([infoRes, listRes]) => {
+        setDbInfo(infoRes.data);
+        setBackups(listRes.data);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchDbInfo(); }, []);
+  useEffect(() => { fetchData(); }, []);
+
+  const handleCreateBackup = async () => {
+    setCreating(true);
+    try {
+      const res = await backupAPI.create();
+      toast.success('Backup created successfully');
+      setBackups((prev) => [res.data, ...prev].slice(0, 3));
+      // Refresh the list to get the auto-pruned state
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to create backup');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -1244,7 +1269,23 @@ function BackupTab() {
     }
   };
 
-  const handleRestore = async (e) => {
+  const handleRestoreById = async (backupId) => {
+    setRestoringId(backupId);
+    setRestoring(true);
+    try {
+      const res = await backupAPI.restoreById(backupId);
+      toast.success(res.data.message || 'Database restored successfully');
+      setConfirmRestore(null);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to restore backup');
+    } finally {
+      setRestoringId(null);
+      setRestoring(false);
+    }
+  };
+
+  const handleRestoreUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -1259,7 +1300,7 @@ function BackupTab() {
       formData.append('file', file);
       const res = await backupAPI.restore(formData);
       toast.success(res.data.message || 'Database restored successfully');
-      fetchDbInfo();
+      fetchData();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to restore database');
     } finally {
@@ -1269,11 +1310,12 @@ function BackupTab() {
   };
 
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="space-y-6">
+      {/* Create & Download */}
       <div className="card p-5">
         <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Database Backup</h2>
         <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-          Download a backup of your entire database or restore from a previous backup.
+          Create, download, and restore database backups. Only the 3 most recent backups are kept.
         </p>
 
         {loading ? (
@@ -1293,37 +1335,149 @@ function BackupTab() {
               </div>
             )}
 
-            {/* Download */}
-            <button onClick={handleDownload} disabled={downloading} className="btn-primary w-full">
-              {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {downloading ? 'Downloading...' : 'Download Backup'}
-            </button>
-
-            {/* Restore */}
-            <div className="pt-4 border-t" style={{ borderColor: 'var(--border-light)' }}>
-              <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-label)' }}>Restore from Backup</p>
-              <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
-                Upload a previously downloaded `.db` file. The current database will be backed up automatically before restoring.
-              </p>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={restoring}
-                className="btn-secondary w-full"
-              >
-                {restoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {restoring ? 'Restoring...' : 'Upload Backup File'}
+            <div className="flex gap-3">
+              <button onClick={handleCreateBackup} disabled={creating} className="btn-primary flex-1">
+                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                {creating ? 'Creating...' : 'Create Backup'}
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".db,.sqlite"
-                className="hidden"
-                onChange={handleRestore}
-              />
+              <button onClick={handleDownload} disabled={downloading} className="btn-secondary">
+                {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Download
+              </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Stored Backups Table */}
+      <div className="card p-5">
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Stored Backups</h2>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          The 3 most recent backups are kept. Restoring will replace the current database with the selected backup.
+        </p>
+
+        {backups.length === 0 ? (
+          <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
+            <Database className="w-10 h-10 mx-auto mb-2 opacity-40" />
+            <p className="text-sm">No backups yet. Click "Create Backup" above to create your first backup.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ backgroundColor: 'var(--gray-50)' }}>
+                  <th className="px-4 py-3 font-medium text-left" style={{ color: 'var(--text-muted)' }}>File</th>
+                  <th className="px-4 py-3 font-medium text-left" style={{ color: 'var(--text-muted)' }}>Size</th>
+                  <th className="px-4 py-3 font-medium text-left" style={{ color: 'var(--text-muted)' }}>Created</th>
+                  <th className="px-4 py-3 font-medium text-left" style={{ color: 'var(--text-muted)' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.map((backup, idx) => (
+                  <tr key={backup.id} className="border-t" style={{ borderColor: 'var(--border-light)' }}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                        <span className="font-medium" style={{ color: 'var(--text-body)' }}>
+                          {idx === 0 ? 'Newest' : idx === backups.length - 1 ? 'Oldest' : `Backup ${backups.length - idx}`}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{backup.sizeFormatted}</td>
+                    <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>
+                      {new Date(backup.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setConfirmRestore(backup)}
+                        disabled={restoring && restoringId === backup.id}
+                        className="btn-sm btn-secondary"
+                      >
+                        {restoring && restoringId === backup.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3 h-3" />
+                        )}
+                        Restore
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Upload Restore */}
+      <div className="card p-5">
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Restore from File</h2>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          Upload a previously downloaded `.db` file. The current database will be backed up automatically before restoring.
+        </p>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={restoring}
+          className="btn-secondary w-full"
+        >
+          {restoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          {restoring ? 'Restoring...' : 'Upload Backup File'}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".db,.sqlite"
+          className="hidden"
+          onChange={handleRestoreUpload}
+        />
+      </div>
+
+      {/* Restore Confirmation Modal */}
+      {confirmRestore && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setConfirmRestore(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-amber-100 text-amber-600 shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold" style={{ color: 'var(--text-body)' }}>Restore Backup</h3>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Restore <strong>{confirmRestore.fileName}</strong> from{' '}
+                    {new Date(confirmRestore.createdAt).toLocaleString()}?
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg p-3 text-sm bg-amber-50 border border-amber-200 text-amber-700">
+                <p className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  This will replace the current database with this backup. A safety copy will be saved automatically.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setConfirmRestore(null)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleRestoreById(confirmRestore.id)}
+                  disabled={restoring}
+                  className="btn-danger"
+                >
+                  {restoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  {restoring ? 'Restoring...' : 'Restore Backup'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

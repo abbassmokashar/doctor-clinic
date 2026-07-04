@@ -234,6 +234,16 @@ model Invoice {
   installments  Installment[]
 }
 
+model Backup {
+  id         Int      @id @default(autoincrement())
+  fileName   String
+  filePath   String
+  fileSize   Int
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model Installment {
   id         Int      @id @default(autoincrement())
   invoiceId  Int

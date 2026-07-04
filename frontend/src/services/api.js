@@ -174,10 +174,13 @@ export const whatsappAPI = {
 // Backup
 export const backupAPI = {
   getInfo: () => api.get('/backup/info'),
+  getList: () => api.get('/backup/list'),
+  create: () => api.post('/backup/create'),
   download: () => api.get('/backup/download', { responseType: 'blob' }),
   restore: (formData) => api.post('/backup/restore', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  restoreById: (id) => api.post(`/backup/restore/${id}`),
 };
 
 export default api;
