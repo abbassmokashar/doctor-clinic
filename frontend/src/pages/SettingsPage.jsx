@@ -44,9 +44,19 @@ const TABS = [
 
 const ROLES = ['ADMIN', 'DOCTOR', 'RECEPTIONIST'];
 
+const ALL_TABS = [
+  { id: 'general', label: 'General', icon: Settings, adminOnly: false },
+  { id: 'appearance', label: 'Appearance', icon: Palette, adminOnly: true },
+  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, adminOnly: true },
+  { id: 'accounts', label: 'Accounts', icon: Users, adminOnly: true },
+  { id: 'backup', label: 'Backup', icon: Database, adminOnly: false },
+];
+
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('general');
   const { user, isAdmin } = useAuth();
+  const isSuperadmin = user?.role === 'SUPERADMIN';
+  const TABS = ALL_TABS.filter((t) => isSuperadmin || t.adminOnly);
+  const [activeTab, setActiveTab] = useState(TABS.length > 0 ? TABS[0].id : 'appearance');
 
   if (!isAdmin) {
     return (
@@ -111,7 +121,17 @@ export default function SettingsPage() {
 }
 
 function GeneralTab() {
-  const { appName, setAppName, logoUrl, setLogoUrl, logoStyle, setLogoStyle, faviconUrl, setFaviconUrl } = useTheme();
+  const {
+    appName, setAppName,
+    logoUrl, setLogoUrl, logoStyle, setLogoStyle,
+    faviconUrl, setFaviconUrl,
+    clinicSubtitle, setClinicSubtitle,
+    invoiceClinicAddress, setInvoiceClinicAddress,
+    invoiceClinicPhone, setInvoiceClinicPhone,
+    invoiceClinicEmail, setInvoiceClinicEmail,
+    invoiceTaxId, setInvoiceTaxId,
+    invoiceFooter, setInvoiceFooter,
+  } = useTheme();
   const [name, setName] = useState(appName);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -407,6 +427,85 @@ function GeneralTab() {
           className="hidden"
           onChange={handleFaviconUpload}
         />
+      </div>
+
+      {/* Invoice Customization */}
+      <div className="card p-5">
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Invoice Settings</h2>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          Customize the information that appears on printed and WhatsApp invoices.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="label">Clinic Tagline / Subtitle</label>
+            <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Appears below the clinic name on invoices.</p>
+            <input
+              type="text"
+              className="input w-full"
+              value={clinicSubtitle}
+              onChange={(e) => setClinicSubtitle(e.target.value)}
+              placeholder="Healthcare &bull; Medical Center"
+            />
+          </div>
+
+          <div>
+            <label className="label">Clinic Address</label>
+            <textarea
+              className="input w-full"
+              rows={2}
+              value={invoiceClinicAddress}
+              onChange={(e) => setInvoiceClinicAddress(e.target.value)}
+              placeholder="123 Medical Street, City"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Phone Number</label>
+              <input
+                type="text"
+                className="input w-full"
+                value={invoiceClinicPhone}
+                onChange={(e) => setInvoiceClinicPhone(e.target.value)}
+                placeholder="+1-555-1234"
+              />
+            </div>
+            <div>
+              <label className="label">Email</label>
+              <input
+                type="email"
+                className="input w-full"
+                value={invoiceClinicEmail}
+                onChange={(e) => setInvoiceClinicEmail(e.target.value)}
+                placeholder="clinic@example.com"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Tax ID / Registration Number</label>
+            <input
+              type="text"
+              className="input w-full"
+              value={invoiceTaxId}
+              onChange={(e) => setInvoiceTaxId(e.target.value)}
+              placeholder="TX-12345678"
+            />
+          </div>
+
+          <div>
+            <label className="label">Invoice Footer</label>
+            <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Appears at the bottom of every invoice. Supports multiple lines.</p>
+            <textarea
+              className="input w-full"
+              rows={3}
+              value={invoiceFooter}
+              onChange={(e) => setInvoiceFooter(e.target.value)}
+              placeholder="Thank you for choosing us for your healthcare needs."
+            />
+          </div>
+        </div>
       </div>
 
       {/* Preview Card */}

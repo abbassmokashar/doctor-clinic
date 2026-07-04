@@ -9,5 +9,6 @@ router.post('/', authenticate, authorize('ADMIN', 'RECEPTIONIST'), invoiceContro
 router.put('/:id', authenticate, authorize('ADMIN', 'RECEPTIONIST'), invoiceController.update);
 router.delete('/:id', authenticate, authorize('ADMIN'), invoiceController.remove);
 router.patch('/:id/pay', authenticate, authorize('ADMIN', 'RECEPTIONIST'), invoiceController.markPaid);
+router.post('/:id/send-whatsapp', authenticate, authorize('ADMIN', 'RECEPTIONIST'), invoiceController.sendWhatsApp);
 
 module.exports = router;

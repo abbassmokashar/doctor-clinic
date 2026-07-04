@@ -19,6 +19,24 @@ export function ThemeProvider({ children }) {
   const [faviconUrl, setFaviconUrlState] = useState(() => {
     return localStorage.getItem('faviconUrl') || '';
   });
+  const [clinicSubtitle, setClinicSubtitleState] = useState(() => {
+    return localStorage.getItem('clinicSubtitle') || 'Healthcare &bull; Medical Center';
+  });
+  const [invoiceClinicAddress, setInvoiceClinicAddressState] = useState(() => {
+    return localStorage.getItem('invoiceClinicAddress') || '';
+  });
+  const [invoiceClinicPhone, setInvoiceClinicPhoneState] = useState(() => {
+    return localStorage.getItem('invoiceClinicPhone') || '';
+  });
+  const [invoiceClinicEmail, setInvoiceClinicEmailState] = useState(() => {
+    return localStorage.getItem('invoiceClinicEmail') || '';
+  });
+  const [invoiceTaxId, setInvoiceTaxIdState] = useState(() => {
+    return localStorage.getItem('invoiceTaxId') || '';
+  });
+  const [invoiceFooter, setInvoiceFooterState] = useState(() => {
+    return localStorage.getItem('invoiceFooter') || '';
+  });
 
   // Apply theme to document
   useEffect(() => {
@@ -45,6 +63,14 @@ export function ThemeProvider({ children }) {
     if (faviconUrl) localStorage.setItem('faviconUrl', faviconUrl);
     else localStorage.removeItem('faviconUrl');
   }, [faviconUrl]);
+
+  // Persist invoice settings
+  useEffect(() => { if (clinicSubtitle) localStorage.setItem('clinicSubtitle', clinicSubtitle); }, [clinicSubtitle]);
+  useEffect(() => { if (invoiceClinicAddress) localStorage.setItem('invoiceClinicAddress', invoiceClinicAddress); else localStorage.removeItem('invoiceClinicAddress'); }, [invoiceClinicAddress]);
+  useEffect(() => { if (invoiceClinicPhone) localStorage.setItem('invoiceClinicPhone', invoiceClinicPhone); else localStorage.removeItem('invoiceClinicPhone'); }, [invoiceClinicPhone]);
+  useEffect(() => { if (invoiceClinicEmail) localStorage.setItem('invoiceClinicEmail', invoiceClinicEmail); else localStorage.removeItem('invoiceClinicEmail'); }, [invoiceClinicEmail]);
+  useEffect(() => { if (invoiceTaxId) localStorage.setItem('invoiceTaxId', invoiceTaxId); else localStorage.removeItem('invoiceTaxId'); }, [invoiceTaxId]);
+  useEffect(() => { if (invoiceFooter) localStorage.setItem('invoiceFooter', invoiceFooter); else localStorage.removeItem('invoiceFooter'); }, [invoiceFooter]);
 
   // Update document favicon
   useEffect(() => {
@@ -118,6 +144,31 @@ export function ThemeProvider({ children }) {
     }
   }, []);
 
+  const setClinicSubtitle = useCallback(async (val) => {
+    setClinicSubtitleState(val);
+    try { await settingsAPI.update({ clinicSubtitle: val }); } catch {}
+  }, []);
+  const setInvoiceClinicAddress = useCallback(async (val) => {
+    setInvoiceClinicAddressState(val);
+    try { await settingsAPI.update({ invoiceClinicAddress: val }); } catch {}
+  }, []);
+  const setInvoiceClinicPhone = useCallback(async (val) => {
+    setInvoiceClinicPhoneState(val);
+    try { await settingsAPI.update({ invoiceClinicPhone: val }); } catch {}
+  }, []);
+  const setInvoiceClinicEmail = useCallback(async (val) => {
+    setInvoiceClinicEmailState(val);
+    try { await settingsAPI.update({ invoiceClinicEmail: val }); } catch {}
+  }, []);
+  const setInvoiceTaxId = useCallback(async (val) => {
+    setInvoiceTaxIdState(val);
+    try { await settingsAPI.update({ invoiceTaxId: val }); } catch {}
+  }, []);
+  const setInvoiceFooter = useCallback(async (val) => {
+    setInvoiceFooterState(val);
+    try { await settingsAPI.update({ invoiceFooter: val }); } catch {}
+  }, []);
+
   // Load settings from backend on mount
   useEffect(() => {
     settingsAPI.getAll()
@@ -138,6 +189,24 @@ export function ThemeProvider({ children }) {
         if (data.faviconUrl) {
           setFaviconUrlState(data.faviconUrl);
         }
+        if (data.clinicSubtitle) {
+          setClinicSubtitleState(data.clinicSubtitle);
+        }
+        if (data.invoiceClinicAddress) {
+          setInvoiceClinicAddressState(data.invoiceClinicAddress);
+        }
+        if (data.invoiceClinicPhone) {
+          setInvoiceClinicPhoneState(data.invoiceClinicPhone);
+        }
+        if (data.invoiceClinicEmail) {
+          setInvoiceClinicEmailState(data.invoiceClinicEmail);
+        }
+        if (data.invoiceTaxId) {
+          setInvoiceTaxIdState(data.invoiceTaxId);
+        }
+        if (data.invoiceFooter) {
+          setInvoiceFooterState(data.invoiceFooter);
+        }
       })
       .catch(() => {});
   }, []);
@@ -151,6 +220,12 @@ export function ThemeProvider({ children }) {
       logoUrl, setLogoUrl,
       logoStyle, setLogoStyle,
       faviconUrl, setFaviconUrl,
+      clinicSubtitle, setClinicSubtitle,
+      invoiceClinicAddress, setInvoiceClinicAddress,
+      invoiceClinicPhone, setInvoiceClinicPhone,
+      invoiceClinicEmail, setInvoiceClinicEmail,
+      invoiceTaxId, setInvoiceTaxId,
+      invoiceFooter, setInvoiceFooter,
     }}>
       {children}
     </ThemeContext.Provider>

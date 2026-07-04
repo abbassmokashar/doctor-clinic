@@ -14,7 +14,10 @@ import {
   SplitSquareHorizontal,
   Calendar,
   CreditCard,
+  Printer,
+  MessageCircle,
 } from 'lucide-react';
+import InvoicePrint from '../components/InvoicePrint';
 import toast from 'react-hot-toast';
 
 const invoiceStatuses = ['PENDING', 'PAID', 'PARTIALLY_PAID', 'CANCELLED', 'REFUNDED'];
@@ -27,6 +30,9 @@ export default function InvoicesPage() {
   const [showModal, setShowModal] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [payingInstallment, setPayingInstallment] = useState(null);
+  const [printInvoice, setPrintInvoice] = useState(null);
+  const [printInstallment, setPrintInstallment] = useState(null);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(null); // invoice id or {invId, instId}
   const { isAdmin, isReceptionist } = useAuth();
   const canEdit = isAdmin || isReceptionist;
 
@@ -127,6 +133,19 @@ export default function InvoicesPage() {
       fetchData();
     } catch (error) {
       toast.error('Failed to update invoice');
+    }
+  };
+
+  const handleSendWhatsApp = async (invId, installmentId) => {
+    const key = installmentId ? `${invId}-${installmentId}` : `${invId}`;
+    setSendingWhatsApp(key);
+    try {
+      const res = await invoiceAPI.sendWhatsApp(invId, installmentId ? { installmentId } : {});
+      toast.success(res.data.message);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to send via WhatsApp');
+    } finally {
+      setSendingWhatsApp(null);
     }
   };
 
@@ -336,6 +355,33 @@ export default function InvoicesPage() {
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                invoiceAPI.getById(inv.id).then((res) => setPrintInvoice(res.data)).catch(() => toast.error('Failed to load invoice'));
+                              }}
+                              className="btn-sm btn-secondary"
+                              title="Print invoice"
+                            >
+                              <Printer className="w-3 h-3" /> Print
+                            </button>
+                            {canEdit && inv.patient?.phone && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSendWhatsApp(inv.id);
+                                }}
+                                disabled={sendingWhatsApp === `${inv.id}`}
+                                className={`btn-sm ${sendingWhatsApp === `${inv.id}` ? 'btn-disabled' : 'btn-secondary'}`}
+                                title="Send invoice via WhatsApp"
+                              >
+                                {sendingWhatsApp === `${inv.id}` ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <MessageCircle className="w-3 h-3" />
+                                )} WhatsApp
+                              </button>
+                            )}
                             {canEdit && !inv.isInstallment && inv.status === 'PENDING' && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleMarkPaid(inv.id, inv.amount); }}
@@ -395,14 +441,43 @@ export default function InvoicesPage() {
                                       <span className={`badge text-xs ${getInstallmentStatusBadge(inst.status)}`}>
                                         {inst.status === 'PAID' ? `Paid ${inst.paidAt ? new Date(inst.paidAt).toLocaleDateString() : ''}` : inst.status.replace('_', ' ')}
                                       </span>
-                                      {canEdit && inst.status === 'PENDING' && (
+                                      <div className="flex items-center gap-2">
                                         <button
-                                          onClick={() => handleMarkInstallmentPaid(inst)}
-                                          className="btn-sm btn-primary"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            invoiceAPI.getById(inv.id).then((res) => setPrintInstallment({ invoice: res.data, installment: inst })).catch(() => toast.error('Failed to load invoice'));
+                                          }}
+                                          className="btn-sm btn-secondary"
+                                          title="Print this installment"
                                         >
-                                          <CheckCircle2 className="w-3 h-3" /> Mark Paid
+                                          <Printer className="w-3 h-3" />
                                         </button>
-                                      )}
+                                        {canEdit && inv.patient?.phone && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleSendWhatsApp(inv.id, inst.id);
+                                            }}
+                                            disabled={sendingWhatsApp === `${inv.id}-${inst.id}`}
+                                            className={`btn-sm ${sendingWhatsApp === `${inv.id}-${inst.id}` ? 'btn-disabled' : 'btn-secondary'}`}
+                                            title="Send this installment via WhatsApp"
+                                          >
+                                            {sendingWhatsApp === `${inv.id}-${inst.id}` ? (
+                                              <Loader2 className="w-3 h-3 animate-spin" />
+                                            ) : (
+                                              <MessageCircle className="w-3 h-3" />
+                                            )}
+                                          </button>
+                                        )}
+                                        {canEdit && inst.status === 'PENDING' && (
+                                          <button
+                                            onClick={() => handleMarkInstallmentPaid(inst)}
+                                            className="btn-sm btn-primary"
+                                          >
+                                            <CheckCircle2 className="w-3 h-3" /> Mark Paid
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                 ))}
@@ -418,6 +493,20 @@ export default function InvoicesPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Print Invoice Modal */}
+      {printInvoice && (
+        <InvoicePrint invoice={printInvoice} onClose={() => setPrintInvoice(null)} />
+      )}
+
+      {/* Print Single Installment Modal */}
+      {printInstallment && (
+        <InvoicePrint
+          invoice={printInstallment.invoice}
+          singleInstallment={printInstallment.installment}
+          onClose={() => setPrintInstallment(null)}
+        />
       )}
 
       {/* Create Invoice Modal */}

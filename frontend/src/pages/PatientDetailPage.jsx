@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { patientAPI, medicalTestAPI } from '../services/api';
+import { patientAPI, medicalTestAPI, invoiceAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft,
@@ -24,7 +24,10 @@ import {
   ExternalLink,
   ZoomIn,
   ZoomOut,
+  Printer,
+  MessageCircle,
 } from 'lucide-react';
+import InvoicePrint from '../components/InvoicePrint';
 import toast from 'react-hot-toast';
 
 export default function PatientDetailPage() {
@@ -38,6 +41,8 @@ export default function PatientDetailPage() {
   const [uploading, setUploading] = useState(false);
   const [previewTest, setPreviewTest] = useState(null);
   const [previewZoom, setPreviewZoom] = useState(1);
+  const [printInvoice, setPrintInvoice] = useState(null);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(null);
   const { isAdmin, isDoctor } = useAuth();
   const canUpload = isAdmin || isDoctor;
 
@@ -424,6 +429,7 @@ export default function PatientDetailPage() {
                   <th className="pb-3 font-medium">Plan</th>
                   <th className="pb-3 font-medium">Status</th>
                   <th className="pb-3 font-medium">Date</th>
+                  <th className="pb-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -450,12 +456,50 @@ export default function PatientDetailPage() {
                       }`}>{inv.status.replace('_', ' ')}</span>
                     </td>
                     <td className="py-2 text-gray-500">{new Date(inv.createdAt).toLocaleDateString()}</td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            invoiceAPI.getById(inv.id).then((res) => setPrintInvoice(res.data)).catch(() => toast.error('Failed to load invoice'));
+                          }}
+                          className="btn-sm btn-secondary"
+                          title="Print invoice"
+                        >
+                          <Printer className="w-3 h-3" /> Print
+                        </button>
+                        {patient?.phone && (
+                          <button
+                            onClick={() => {
+                              setSendingWhatsApp(inv.id);
+                              invoiceAPI.sendWhatsApp(inv.id)
+                                .then((res) => toast.success(res.data.message))
+                                .catch((err) => toast.error(err.response?.data?.message || 'Failed to send via WhatsApp'))
+                                .finally(() => setSendingWhatsApp(null));
+                            }}
+                            disabled={sendingWhatsApp === inv.id}
+                            className={`btn-sm ${sendingWhatsApp === inv.id ? 'btn-disabled' : 'btn-secondary'}`}
+                            title="Send invoice via WhatsApp"
+                          >
+                            {sendingWhatsApp === inv.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <MessageCircle className="w-3 h-3" />
+                            )} WhatsApp
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+      )}
+
+      {/* Print Invoice Modal */}
+      {printInvoice && (
+        <InvoicePrint invoice={printInvoice} onClose={() => setPrintInvoice(null)} />
       )}
 
       {/* File Preview Modal */}

@@ -39,7 +39,7 @@ const upload = multer({
  * GET /api/backup/download
  * Download the SQLite database file.
  */
-router.get('/download', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.get('/download', authenticate, authorize('SUPERADMIN'), async (req, res, next) => {
   try {
     if (!fs.existsSync(DB_PATH)) {
       return res.status(404).json({ message: 'Database file not found.' });
@@ -59,7 +59,7 @@ router.get('/download', authenticate, authorize('ADMIN'), async (req, res, next)
  * POST /api/backup/restore
  * Upload a SQLite database file to restore.
  */
-router.post('/restore', authenticate, authorize('ADMIN'), upload.single('file'), async (req, res, next) => {
+router.post('/restore', authenticate, authorize('SUPERADMIN'), upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
@@ -97,7 +97,7 @@ router.post('/restore', authenticate, authorize('ADMIN'), upload.single('file'),
  * GET /api/backup/info
  * Get database info (size, last modified).
  */
-router.get('/info', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.get('/info', authenticate, authorize('SUPERADMIN'), async (req, res, next) => {
   try {
     if (!fs.existsSync(DB_PATH)) {
       return res.json({ exists: false });
@@ -120,7 +120,7 @@ router.get('/info', authenticate, authorize('ADMIN'), async (req, res, next) => 
  * GET /api/backup/list
  * List stored backups (up to 3 most recent).
  */
-router.get('/list', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.get('/list', authenticate, authorize('SUPERADMIN'), async (req, res, next) => {
   try {
     const backups = await req.prisma.backup.findMany({
       orderBy: { createdAt: 'desc' },
@@ -158,7 +158,7 @@ router.get('/list', authenticate, authorize('ADMIN'), async (req, res, next) => 
  * POST /api/backup/create
  * Create a new backup of the current database.
  */
-router.post('/create', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.post('/create', authenticate, authorize('SUPERADMIN'), async (req, res, next) => {
   try {
     if (!fs.existsSync(DB_PATH)) {
       return res.status(404).json({ message: 'Database file not found.' });
@@ -221,7 +221,7 @@ router.post('/create', authenticate, authorize('ADMIN'), async (req, res, next) 
  * POST /api/backup/restore/:id
  * Restore the database from a stored backup.
  */
-router.post('/restore/:id', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.post('/restore/:id', authenticate, authorize('SUPERADMIN'), async (req, res, next) => {
   try {
     const backupId = parseInt(req.params.id);
     const backup = await req.prisma.backup.findUnique({ where: { id: backupId } });

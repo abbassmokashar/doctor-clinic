@@ -14,7 +14,11 @@ exports.getAll = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const updates = req.body; // { appName: "...", colorTheme: "...", logoUrl: "...", logoStyle: "..." }
-    const allowedKeys = ['appName', 'colorTheme', 'logoUrl', 'logoStyle', 'faviconUrl'];
+    const allowedKeys = [
+      'appName', 'colorTheme', 'logoUrl', 'logoStyle', 'faviconUrl',
+      'clinicSubtitle', 'invoiceClinicAddress', 'invoiceClinicPhone',
+      'invoiceClinicEmail', 'invoiceTaxId', 'invoiceFooter',
+    ];
 
     for (const key of Object.keys(updates)) {
       if (!allowedKeys.includes(key)) continue;

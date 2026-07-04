@@ -118,6 +118,7 @@ export const invoiceAPI = {
   update: (id, data) => api.put(`/invoices/${id}`, data),
   delete: (id) => api.delete(`/invoices/${id}`),
   markPaid: (id, data) => api.patch(`/invoices/${id}/pay`, data),
+  sendWhatsApp: (id, data) => api.post(`/invoices/${id}/send-whatsapp`, data),
 };
 
 // Installments

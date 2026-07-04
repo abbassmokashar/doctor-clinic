@@ -10,11 +10,12 @@
  * Switch modes by setting WHATSAPP_MODE=console in .env to disable real messaging.
  */
 
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 // ─── Mode Configuration ───────────────────────────────────────────────────────
 
@@ -67,8 +68,15 @@ function initializeClient() {
   console.log('━'.repeat(60));
   console.log('');
 
+  // Use a session directory outside OneDrive to avoid file lock issues
+  const sessionDir = process.env.WHATSAPP_SESSION_DIR || path.join(os.homedir(), '.whatsapp-session');
+  if (!fs.existsSync(sessionDir)) {
+    fs.mkdirSync(sessionDir, { recursive: true });
+  }
+  console.log(`[WHATSAPP] Session directory: ${sessionDir}`);
+
   client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({ dataPath: sessionDir }),
     puppeteer: {
       executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       headless: true,
@@ -432,13 +440,23 @@ async function resetConnection() {
   await new Promise(resolve => setTimeout(resolve, 1500));
 
   // Clear the LocalAuth session data so the next initialization generates a fresh QR code
-  const authDir = path.join(__dirname, '../../.wwebjs_auth');
-  if (fs.existsSync(authDir)) {
+  const sessionDir = process.env.WHATSAPP_SESSION_DIR || path.join(os.homedir(), '.whatsapp-session');
+  if (fs.existsSync(sessionDir)) {
     try {
-      fs.rmSync(authDir, { recursive: true, force: true });
+      fs.rmSync(sessionDir, { recursive: true, force: true });
       console.log('[WHATSAPP] ✓ LocalAuth session data cleared.');
     } catch (e) {
       console.warn('[WHATSAPP] Error clearing LocalAuth session:', e.message);
+    }
+  }
+
+  // Also clean up old OneDrive-locked .wwebjs_auth if it exists
+  const oldAuthDir = path.join(__dirname, '../../.wwebjs_auth');
+  if (fs.existsSync(oldAuthDir)) {
+    try {
+      fs.rmSync(oldAuthDir, { recursive: true, force: true });
+    } catch (e) {
+      // Ignore - OneDrive may have it locked
     }
   }
 
@@ -458,8 +476,65 @@ async function resetConnection() {
   }, 1000);
 }
 
+/**
+ * Send a media file via WhatsApp.
+ *
+ * @param {string} to - Recipient phone number (any common format)
+ * @param {Buffer} fileBuffer - File content as a Buffer
+ * @param {string} filename - Display filename (e.g. "invoice-123.pdf")
+ * @param {string} mimeType - MIME type (e.g. "application/pdf")
+ * @param {string} [caption] - Optional text caption
+ * @returns {Promise<{success: boolean, error?: string, mode?: string}>}
+ */
+async function sendMedia(to, fileBuffer, filename, mimeType, caption) {
+  const formattedNumber = formatPhoneNumber(to);
+  if (!formattedNumber) {
+    return { success: false, error: 'Invalid phone number' };
+  }
+
+  if (MODE === MODE_WEB) {
+    if (!client) return { success: false, error: 'WhatsApp client not initialized.' };
+    if (!isReady) return { success: false, error: 'WhatsApp client not ready yet. Scan QR code.' };
+
+    try {
+      const base64Data = fileBuffer.toString('base64');
+      const media = new MessageMedia(mimeType, base64Data, filename);
+
+      // Resolve number to WID (same LID-safe approach as sendMessage)
+      let resolvedWid = null;
+      try {
+        resolvedWid = await client.getNumberId(formattedNumber);
+      } catch (e) {
+        // ignore
+      }
+      const chatId = resolvedWid?._serialized || `${formattedNumber}@c.us`;
+
+      const sendOptions = {};
+      if (caption) sendOptions.caption = caption;
+
+      const result = await client.sendMessage(chatId, media, sendOptions);
+      console.log(`[WHATSAPP] ✓ Media sent successfully to ${formattedNumber} (${filename})`);
+      return { success: true, messageId: result?.id?._serialized || 'sent' };
+    } catch (error) {
+      console.error(`[WHATSAPP] ✗ Failed to send media to ${formattedNumber}: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Console mode
+  console.log('─'.repeat(60));
+  console.log(`📱 [WHATSAPP DEMO] To: ${formattedNumber}`);
+  console.log(`📎 File: ${filename} (${mimeType}, ${(fileBuffer.length / 1024).toFixed(1)} KB)`);
+  if (caption) console.log(`📝 Caption: ${caption}`);
+  console.log('─'.repeat(60));
+  console.log(`(Set WHATSAPP_MODE=web and scan QR code to send real messages.)`);
+  console.log('─'.repeat(60));
+  return { success: true, mode: 'console', to: formattedNumber };
+}
+
 module.exports = {
   sendMessage,
+  sendMedia,
   getMode,
   isClientReady,
   getConnectionDetails,

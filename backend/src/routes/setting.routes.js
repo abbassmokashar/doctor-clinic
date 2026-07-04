@@ -37,9 +37,10 @@ const logoUpload = multer({
 
 // Settings
 router.get('/', authenticate, settingController.getAll);
-router.put('/', authenticate, authorize('ADMIN'), settingController.update);
-router.post('/logo', authenticate, authorize('ADMIN'), logoUpload.single('logo'), settingController.uploadLogo);
-router.delete('/logo', authenticate, authorize('ADMIN'), settingController.removeLogo);
+// General tab (branding, logo, favicon) — SUPERADMIN only
+router.put('/', authenticate, authorize('SUPERADMIN'), settingController.update);
+router.post('/logo', authenticate, authorize('SUPERADMIN'), logoUpload.single('logo'), settingController.uploadLogo);
+router.delete('/logo', authenticate, authorize('SUPERADMIN'), settingController.removeLogo);
 
 // Multer config for favicon uploads
 const faviconStorage = multer.diskStorage({
@@ -70,8 +71,8 @@ const faviconUpload = multer({
   },
 });
 
-router.post('/favicon', authenticate, authorize('ADMIN'), faviconUpload.single('favicon'), settingController.uploadFavicon);
-router.delete('/favicon', authenticate, authorize('ADMIN'), settingController.removeFavicon);
+router.post('/favicon', authenticate, authorize('SUPERADMIN'), faviconUpload.single('favicon'), settingController.uploadFavicon);
+router.delete('/favicon', authenticate, authorize('SUPERADMIN'), settingController.removeFavicon);
 
 // User management (admin/superadmin only)
 router.get('/users', authenticate, authorize('ADMIN'), settingController.getUsers);
