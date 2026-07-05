@@ -15,6 +15,8 @@ import {
   List,
   Grid3X3,
   Send,
+  AlertTriangle,
+  Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -73,6 +75,7 @@ export default function AppointmentsPage() {
   const [sendingReminder, setSendingReminder] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [pendingCloseId, setPendingCloseId] = useState(null);
+  const [doctorApptsCache, setDoctorApptsCache] = useState({});
   const { isAdmin, isDoctor, isReceptionist } = useAuth();
   const canEdit = isAdmin || isDoctor || isReceptionist;
   const tabIdCounter = useRef(0);
@@ -136,7 +139,7 @@ export default function AppointmentsPage() {
     return () => window.removeEventListener('beforeunload', save);
   }, [tabs, activeTabId]);
 
-  const openTab = useCallback((initialForm = {}) => {
+  const openTab = useCallback((initialForm = {}, type = 'create') => {
     const id = ++tabIdCounter.current;
     // Auto-fill date from selected day if not provided
     const defaultForm = {
@@ -149,10 +152,40 @@ export default function AppointmentsPage() {
       const d = String(selectedDate.getDate()).padStart(2, '0');
       defaultForm.dateTime = `${y}-${m}-${d}T09:00`;
     }
-    const newTab = { id, title: 'New Appointment', form: defaultForm, initialForm: { ...defaultForm }, type: 'create' };
+    const title = type === 'edit' ? 'Edit Appointment' : 'New Appointment';
+    const newTab = { id, title, form: defaultForm, initialForm: { ...defaultForm }, type };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
   }, [selectedDate]);
+
+  const openEditTab = useCallback((appt) => {
+    const id = ++tabIdCounter.current;
+    const dateTimeLocal = new Date(appt.dateTime);
+    const offset = dateTimeLocal.getTimezoneOffset();
+    const localISODate = new Date(dateTimeLocal.getTime() - offset * 60000).toISOString().slice(0, 16);
+    const form = {
+      doctorId: String(appt.doctorId),
+      patientId: String(appt.patientId),
+      dateTime: localISODate,
+      duration: appt.duration || 30,
+      reason: appt.reason || '',
+    };
+    const newTab = { id, title: 'Edit Appointment', form, initialForm: { ...form }, type: 'edit', appointmentId: appt.id };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(id);
+
+    // Pre-fetch doctor's appointments for overlap checking
+    const docId = String(appt.doctorId);
+    setDoctorApptsCache((prev) => {
+      if (prev[docId]) return prev;
+      doctorAPI.getAppointments(docId).then((res) => {
+        setDoctorApptsCache((p) => ({ ...p, [docId]: { appointments: res.data, loading: false } }));
+      }).catch(() => {
+        setDoctorApptsCache((p) => ({ ...p, [docId]: { appointments: [], loading: false } }));
+      });
+      return { ...prev, [docId]: { appointments: [], loading: true } };
+    });
+  }, []);
 
   const forceCloseTab = useCallback((id) => {
     setTabs((prev) => {
@@ -262,14 +295,75 @@ export default function AppointmentsPage() {
   };
 
   const handleSubmitTab = async (tab) => {
+    // Validate that the date/time is not in the past
+    const apptDateTime = new Date(tab.form.dateTime);
+    const apptEndTime = new Date(apptDateTime.getTime() + (tab.form.duration || 30) * 60000);
+    if (apptEndTime <= new Date()) {
+      toast.error('Cannot create an appointment in the past. Please select a future date and time.');
+      return;
+    }
+    // Validate that the selected time is within the doctor's working hours
+    if (tab.form.doctorId && tab.form.dateTime) {
+      const doc = doctors.find((d) => d.id === parseInt(tab.form.doctorId));
+      if (doc?.schedules?.length) {
+        const dayOfWeek = new Date(tab.form.dateTime).getDay();
+        const schedule = doc.schedules.find((s) => s.dayOfWeek === dayOfWeek);
+        const dayName = new Date(tab.form.dateTime).toLocaleDateString('en-US', { weekday: 'long' });
+        if (!schedule) {
+          toast.error(`Doctor is not available on ${dayName}.`);
+          return;
+        }
+        const date = new Date(tab.form.dateTime);
+        const duration = tab.form.duration || 30;
+        const endDate = new Date(date.getTime() + duration * 60000);
+        const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        const endTimeStr = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+        if (timeStr < schedule.startTime) {
+          toast.error(`Selected time (${timeStr}) is before working hours (${schedule.startTime}).`);
+          return;
+        }
+        if (endTimeStr > schedule.endTime) {
+          toast.error(`Appointment ends at ${endTimeStr}, which is after working hours (${schedule.endTime}).`);
+          return;
+        }
+      }
+    }
+    // Check for overlapping appointments before submitting (exclude self for edits)
+    const overlapping = getOverlappingAppts(tab.form.doctorId, tab.form.dateTime, tab.form.duration, tab.appointmentId);
+    if (overlapping.length > 0) {
+      toast.error('This time slot conflicts with an existing appointment. Please choose a different time or doctor.');
+      return;
+    }
+    // Check that the patient doesn't already have an appointment at this time
+    if (tab.form.patientId && tab.form.dateTime) {
+      const newStart = new Date(tab.form.dateTime);
+      const newEnd = new Date(newStart.getTime() + (tab.form.duration || 30) * 60000);
+      const patientConflict = appointments.some((a) => {
+        if (tab.appointmentId && a.id === tab.appointmentId) return false; // exclude self
+        if (String(a.patientId) !== tab.form.patientId) return false;
+        if (!['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'].includes(a.status)) return false;
+        const aStart = new Date(a.dateTime);
+        const aEnd = new Date(aStart.getTime() + (a.duration || 30) * 60000);
+        return newStart < aEnd && newEnd > aStart;
+      });
+      if (patientConflict) {
+        toast.error('This patient already has an appointment at this time with another doctor.');
+        return;
+      }
+    }
     setSubmitting(true);
     try {
-      await appointmentAPI.create(tab.form);
-      toast.success('Appointment created');
+      if (tab.type === 'edit') {
+        await appointmentAPI.update(tab.appointmentId, tab.form);
+        toast.success('Appointment updated');
+      } else {
+        await appointmentAPI.create(tab.form);
+        toast.success('Appointment created');
+      }
       closeTab(tab.id, true);
       refreshCalendar();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create appointment');
+      toast.error(error.response?.data?.message || 'Failed to save appointment');
     } finally {
       setSubmitting(false);
     }
@@ -320,36 +414,157 @@ export default function AppointmentsPage() {
     return counts;
   };
 
-  const renderAppointmentForm = (tab, onFieldChange) => (
-    <div className="max-w-md space-y-4">
-      <div>
-        <label className="label">Doctor *</label>
-        <select className="input" value={tab.form.doctorId} onChange={(e) => onFieldChange({ ...tab.form, doctorId: e.target.value })} required>
-          <option value="">Select doctor...</option>
-          {doctors.map((d) => <option key={d.id} value={d.id}>{d.user?.name} - {d.specialization}</option>)}
-        </select>
+  // Compute overlapping appointments for a given doctor/dateTime/duration
+  const getOverlappingAppts = useCallback((doctorId, dateTime, duration, excludeId) => {
+    if (!doctorId || !dateTime) return [];
+    const doctorAppts = doctorApptsCache[doctorId]?.appointments;
+    if (!doctorAppts) return [];
+
+    const newStart = new Date(dateTime);
+    const newEnd = new Date(newStart.getTime() + (duration || 30) * 60000);
+
+    return doctorAppts.filter((existing) => {
+      // Skip the appointment being edited (self-overlap)
+      if (excludeId && existing.id === excludeId) return false;
+      const existingStart = new Date(existing.dateTime);
+      const existingEnd = new Date(existingStart.getTime() + (existing.duration || 30) * 60000);
+      // Check if the new time overlaps with the existing appointment
+      return newStart < existingEnd && newEnd > existingStart;
+    });
+  }, [doctorApptsCache]);
+
+  const renderAppointmentForm = (tab, onFieldChange) => {
+    const overlapping = getOverlappingAppts(tab.form.doctorId, tab.form.dateTime, tab.form.duration, tab.appointmentId);
+    const selectedDoctorAppts = tab.form.doctorId ? doctorApptsCache[tab.form.doctorId] : null;
+
+    return (
+      <div className="max-w-md space-y-4">
+        <div>
+          <label className="label">Doctor *</label>
+          <select
+            className="input"
+            value={tab.form.doctorId}
+            onChange={(e) => {
+              const newDoctorId = e.target.value;
+              onFieldChange({ ...tab.form, doctorId: newDoctorId });
+              // Fetch doctor's appointments if not cached
+              if (newDoctorId && !doctorApptsCache[newDoctorId]) {
+                setDoctorApptsCache((prev) => ({ ...prev, [newDoctorId]: { appointments: [], loading: true } }));
+                doctorAPI.getAppointments(newDoctorId)
+                  .then((res) => {
+                    setDoctorApptsCache((prev) => ({ ...prev, [newDoctorId]: { appointments: res.data, loading: false } }));
+                  })
+                  .catch(() => {
+                    setDoctorApptsCache((prev) => ({ ...prev, [newDoctorId]: { appointments: [], loading: false } }));
+                  });
+              }
+            }}
+            required
+          >
+            <option value="">Select doctor...</option>
+            {doctors.map((d) => <option key={d.id} value={d.id}>{d.user?.name} - {d.specialization}</option>)}
+          </select>
+          {selectedDoctorAppts?.loading && (
+            <p className="text-xs mt-1 text-gray-400 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Loading doctor's schedule...
+            </p>
+          )}
+
+          {/* Doctor Working Hours */}
+          {tab.form.doctorId && tab.form.dateTime && (() => {
+            const doc = doctors.find((d) => d.id === parseInt(tab.form.doctorId));
+            if (!doc?.schedules?.length) return null;
+            const dayOfWeek = new Date(tab.form.dateTime).getDay();
+            const schedule = doc.schedules.find((s) => s.dayOfWeek === dayOfWeek);
+            const dayName = new Date(tab.form.dateTime).toLocaleDateString('en-US', { weekday: 'long' });
+
+            if (!schedule) {
+              return (
+                <div className="rounded-lg p-3 bg-amber-50 border border-amber-200 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span className="text-amber-700 font-medium">
+                      Doctor is not available on {dayName}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+
+            const date = new Date(tab.form.dateTime);
+            const duration = tab.form.duration || 30;
+            const endDate = new Date(date.getTime() + duration * 60000);
+            const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+            const endTimeStr = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+            const inHours = timeStr >= schedule.startTime && endTimeStr <= schedule.endTime;
+
+            return (
+              <div className={`rounded-lg p-3 text-sm border ${inHours ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                <div className="flex items-center gap-2">
+                  <Clock className={`w-4 h-4 shrink-0 ${inHours ? 'text-emerald-500' : 'text-amber-500'}`} />
+                  <span className={inHours ? 'text-emerald-700' : 'text-amber-700'}>
+                    Working hours: {schedule.startTime} - {schedule.endTime} ({dayName})
+                  </span>
+                </div>
+                {!inHours && (
+                  <p className="text-xs text-amber-600 mt-1 ml-6">
+                    {timeStr < schedule.startTime
+                      ? `Selected time (${timeStr}) is before working hours (${schedule.startTime}).`
+                      : `Appointment ends at ${endTimeStr}, which is after working hours (${schedule.endTime}).`}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+        <div>
+          <label className="label">Patient *</label>
+          <select className="input" value={tab.form.patientId} onChange={(e) => onFieldChange({ ...tab.form, patientId: e.target.value })} required>
+            <option value="">Select patient...</option>
+            {patients.map((p) => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} - {p.phone}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Date & Time *</label>
+          <input type="datetime-local" className="input" value={tab.form.dateTime} onChange={(e) => onFieldChange({ ...tab.form, dateTime: e.target.value })} min={(() => { const n = new Date(); return new Date(n.getTime() - n.getTimezoneOffset() * 60000).toISOString().slice(0, 16); })()} required />
+        </div>
+        <div>
+          <label className="label">Duration (minutes)</label>
+          <input type="number" className="input" value={tab.form.duration} onChange={(e) => onFieldChange({ ...tab.form, duration: parseInt(e.target.value) || 30 })} min={15} step={15} />
+        </div>
+        <div>
+          <label className="label">Reason</label>
+          <textarea className="input" rows={2} value={tab.form.reason} onChange={(e) => onFieldChange({ ...tab.form, reason: e.target.value })} />
+        </div>
+
+        {/* Overlap Warning */}
+        {overlapping.length > 0 && (
+          <div className="rounded-lg p-3 bg-red-50 border border-red-200 text-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+              <span className="font-medium text-red-700">
+                {overlapping.length === 1
+                  ? '1 overlapping appointment found'
+                  : `${overlapping.length} overlapping appointments found`}
+              </span>
+            </div>
+            <p className="text-xs text-red-600 mb-2">
+              The selected doctor already has appointment(s) during this time slot.
+            </p>
+            <div className="space-y-1.5">
+              {overlapping.map((appt) => (
+                <div key={appt.id} className="flex items-center justify-between text-xs bg-white rounded px-2 py-1.5 border border-red-100">
+                  <span className="font-medium text-red-700">{appt.patient?.firstName} {appt.patient?.lastName}</span>
+                  <span className="text-red-500">{formatTime(appt.dateTime)} ({appt.duration || 30} min)</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-      <div>
-        <label className="label">Patient *</label>
-        <select className="input" value={tab.form.patientId} onChange={(e) => onFieldChange({ ...tab.form, patientId: e.target.value })} required>
-          <option value="">Select patient...</option>
-          {patients.map((p) => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} - {p.phone}</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="label">Date & Time *</label>
-        <input type="datetime-local" className="input" value={tab.form.dateTime} onChange={(e) => onFieldChange({ ...tab.form, dateTime: e.target.value })} required />
-      </div>
-      <div>
-        <label className="label">Duration (minutes)</label>
-        <input type="number" className="input" value={tab.form.duration} onChange={(e) => onFieldChange({ ...tab.form, duration: parseInt(e.target.value) || 30 })} min={15} step={15} />
-      </div>
-      <div>
-        <label className="label">Reason</label>
-        <textarea className="input" rows={2} value={tab.form.reason} onChange={(e) => onFieldChange({ ...tab.form, reason: e.target.value })} />
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -479,6 +694,11 @@ export default function AppointmentsPage() {
                                 <Send className="w-3 h-3" /> {sendingReminder === appt.id ? '...' : 'Remind'}
                               </button>
                             )}
+                            {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                              <button onClick={(e) => { e.stopPropagation(); openEditTab(appt); }} className="btn-sm text-[10px] px-2 py-1 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 rounded">
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
                             {appt.status === 'SCHEDULED' && (<><button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm text-[10px] px-2 py-1 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 rounded">Confirm</button><button onClick={() => handleStatusChange(appt.id, 'CANCELLED')} className="btn-sm text-[10px] px-2 py-1 bg-white text-red-600 border border-red-200 hover:bg-red-50 rounded">Cancel</button></>)}
                             {appt.status === 'CONFIRMED' && <button onClick={() => handleStatusChange(appt.id, 'IN_PROGRESS')} className="btn-sm text-[10px] px-2 py-1 bg-primary-50 text-primary-700 hover:bg-primary-100 rounded">Start</button>}
                             {appt.status === 'IN_PROGRESS' && <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="btn-sm text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded">Complete</button>}
@@ -533,6 +753,9 @@ export default function AppointmentsPage() {
                             {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
                               <button disabled={sendingReminder === appt.id} onClick={async () => { setSendingReminder(appt.id); try { const res = await reminderAPI.sendForAppointment(appt.id); toast.success(res.data.message || 'Reminder sent!'); } catch (err) { toast.error(err.response?.data?.error || 'Failed to send reminder'); } finally { setSendingReminder(null); } }} className="btn-sm btn-remind" title="Send WhatsApp reminder">{sendingReminder === appt.id ? 'Sending...' : 'Remind'}</button>
                             )}
+                            {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                              <button onClick={() => openEditTab(appt)} className="btn-sm btn-secondary" title="Edit appointment"><Pencil className="w-3 h-3" /></button>
+                            )}
                             {appt.status === 'SCHEDULED' && (<><button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm btn-secondary">Confirm</button><button onClick={() => handleStatusChange(appt.id, 'CANCELLED')} className="btn-sm btn-danger">Cancel</button></>)}
                             {appt.status === 'CONFIRMED' && <button onClick={() => handleStatusChange(appt.id, 'IN_PROGRESS')} className="btn-sm btn-primary">Start</button>}
                             {appt.status === 'IN_PROGRESS' && <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="btn-sm btn-primary">Complete</button>}
@@ -559,7 +782,7 @@ export default function AppointmentsPage() {
         }}
         renderForm={renderAppointmentForm}
         onSubmit={handleSubmitTab}
-        submitLabel="Create Appointment"
+        submitLabel={tabs.find((t) => t.id === activeTabId)?.type === 'edit' ? 'Update Appointment' : 'Create Appointment'}
         submitting={submitting}
       />
 
