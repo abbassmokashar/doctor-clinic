@@ -80,6 +80,10 @@ export const medicalRecordAPI = {
   create: (data) => api.post('/medical-records', data),
   update: (id, data) => api.put(`/medical-records/${id}`, data),
   delete: (id) => api.delete(`/medical-records/${id}`),
+  uploadImage: (id, formData) => api.post(`/medical-records/${id}/images`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  removeImage: (id, imageIndex) => api.delete(`/medical-records/${id}/images/${imageIndex}`),
 };
 
 // Medications

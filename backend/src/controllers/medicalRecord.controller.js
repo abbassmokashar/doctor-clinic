@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 exports.getByPatient = async (req, res, next) => {
   try {
     const records = await req.prisma.medicalRecord.findMany({
@@ -36,7 +39,7 @@ exports.getById = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    let { patientId, doctorId, appointmentId, diagnosis, symptoms, notes } = req.body;
+    let { patientId, doctorId, appointmentId, diagnosis, symptoms, notes, images } = req.body;
 
     // If user is a doctor, auto-set to their doctor profile
     if (req.user.role === 'DOCTOR') {
@@ -45,13 +48,19 @@ exports.create = async (req, res, next) => {
       doctorId = doctor.id;
     }
 
+    const data = {
+      patientId: parseInt(patientId),
+      doctorId: parseInt(doctorId),
+      appointmentId: appointmentId ? parseInt(appointmentId) : null,
+      diagnosis, symptoms, notes,
+    };
+
+    if (images) {
+      data.images = typeof images === 'string' ? images : JSON.stringify(images);
+    }
+
     const record = await req.prisma.medicalRecord.create({
-      data: {
-        patientId: parseInt(patientId),
-        doctorId: parseInt(doctorId),
-        appointmentId: appointmentId ? parseInt(appointmentId) : null,
-        diagnosis, symptoms, notes,
-      },
+      data,
       include: {
         doctor: { include: { user: { select: { name: true } } } },
         patient: { select: { firstName: true, lastName: true } },
@@ -74,11 +83,16 @@ exports.create = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const { diagnosis, symptoms, notes } = req.body;
+    const { diagnosis, symptoms, notes, images } = req.body;
+
+    const data = { diagnosis, symptoms, notes };
+    if (images) {
+      data.images = typeof images === 'string' ? images : JSON.stringify(images);
+    }
 
     const record = await req.prisma.medicalRecord.update({
       where: { id: parseInt(req.params.id) },
-      data: { diagnosis, symptoms, notes },
+      data,
       include: {
         doctor: { include: { user: { select: { name: true } } } },
         patient: { select: { firstName: true, lastName: true } },
@@ -93,10 +107,135 @@ exports.update = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
+    const recordId = parseInt(req.params.id);
+
+    // Delete associated image files before removing the record
+    const record = await req.prisma.medicalRecord.findUnique({
+      where: { id: recordId },
+      select: { images: true },
+    });
+
+    if (record?.images) {
+      try {
+        const images = JSON.parse(record.images);
+        if (Array.isArray(images)) {
+          for (const img of images) {
+            const filePath = path.join(__dirname, '../../', img.url);
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore parse errors - just delete the record
+      }
+    }
+
     await req.prisma.medicalRecord.delete({
-      where: { id: parseInt(req.params.id) },
+      where: { id: recordId },
     });
     res.json({ message: 'Medical record deleted successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.uploadImage = async (req, res, next) => {
+  try {
+    const recordId = parseInt(req.params.id);
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file uploaded.' });
+    }
+
+    const record = await req.prisma.medicalRecord.findUnique({
+      where: { id: recordId },
+      select: { images: true },
+    });
+
+    if (!record) {
+      // Clean up the uploaded file if record not found
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ message: 'Medical record not found.' });
+    }
+
+    const imageUrl = `/uploads/medical-record-images/${req.file.filename}`;
+    const newImage = {
+      url: imageUrl,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      type: req.file.mimetype,
+      size: req.file.size,
+    };
+
+    let images = [];
+    if (record.images) {
+      try {
+        images = JSON.parse(record.images);
+        if (!Array.isArray(images)) images = [];
+      } catch (e) {
+        images = [];
+      }
+    }
+    images.push(newImage);
+
+    await req.prisma.medicalRecord.update({
+      where: { id: recordId },
+      data: { images: JSON.stringify(images) },
+    });
+
+    res.json({ image: newImage, images });
+  } catch (error) {
+    // Clean up the uploaded file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+    next(error);
+  }
+};
+
+exports.removeImage = async (req, res, next) => {
+  try {
+    const recordId = parseInt(req.params.id);
+    const imageIndex = parseInt(req.params.imageIndex);
+
+    const record = await req.prisma.medicalRecord.findUnique({
+      where: { id: recordId },
+      select: { images: true },
+    });
+
+    if (!record) return res.status(404).json({ message: 'Medical record not found.' });
+
+    let images = [];
+    if (record.images) {
+      try {
+        images = JSON.parse(record.images);
+        if (!Array.isArray(images)) images = [];
+      } catch (e) {
+        images = [];
+      }
+    }
+
+    if (imageIndex < 0 || imageIndex >= images.length) {
+      return res.status(400).json({ message: 'Invalid image index.' });
+    }
+
+    const removed = images.splice(imageIndex, 1)[0];
+
+    // Delete the file from disk
+    if (removed?.url) {
+      const filePath = path.join(__dirname, '../../', removed.url);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    await req.prisma.medicalRecord.update({
+      where: { id: recordId },
+      data: { images: images.length > 0 ? JSON.stringify(images) : null },
+    });
+
+    res.json({ images });
   } catch (error) {
     next(error);
   }

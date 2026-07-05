@@ -106,7 +106,7 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const doctorId = parseInt(req.params.id);
-    const { specialization, licenseNumber, bio, consultationFee, isAvailable, name, email, password } = req.body;
+    const { specialization, licenseNumber, bio, consultationFee, isAvailable, name, email, password, phone } = req.body;
 
     // Doctors can only update their own profile
     if (req.user.role === 'DOCTOR') {

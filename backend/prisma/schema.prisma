@@ -125,6 +125,7 @@ model MedicalRecord {
   diagnosis      String
   symptoms       String?
   notes          String?
+  images         String?  // JSON array: [{url, filename, type, size}]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

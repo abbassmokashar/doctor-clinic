@@ -23,7 +23,7 @@ const reminderRoutes = require('./routes/reminder.routes');
 const settingRoutes = require('./routes/setting.routes');
 const backupRoutes = require('./routes/backup.routes');
 const whatsappRoutes = require('./routes/whatsapp.routes');
-const { startReminderScheduler } = require('./services/reminder.service');
+const { startReminderScheduler, stopReminderScheduler } = require('./services/reminder.service');
 
 const { errorHandler, notFound } = require('./middleware/error.middleware');
 
@@ -31,8 +31,94 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
-// Start the appointment reminder scheduler
-startReminderScheduler(prisma);
+// ─── Derive DB path from DATABASE_URL ──────────────────────────────────────
+
+function getDbPath() {
+  const url = process.env.DATABASE_URL || 'file:./prisma/dev.db';
+  // Parse SQLite connection string: "file:./prisma/dev.db" or "file:/absolute/path"
+  const match = url.match(/^file:(.+)$/);
+  if (match) {
+    const filePath = match[1];
+    if (path.isAbsolute(filePath)) return filePath;
+    return path.resolve(__dirname, '..', filePath);
+  }
+  return path.join(__dirname, '../prisma/dev.db');
+}
+
+const DB_PATH = getDbPath();
+const BACKUPS_DIR = path.join(__dirname, '../uploads/backups');
+
+// ─── Crash-Safe Database Setup + Startup ────────────────────────────────────
+
+async function initializeDatabase() {
+  // Enable WAL mode for crash-safe writes and better concurrent reads
+  // Use $queryRawUnsafe because PRAGMA statements return results in newer Prisma
+  await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL');
+  // Full synchronous mode ensures data is fully flushed to disk before acknowledging
+  await prisma.$queryRawUnsafe('PRAGMA synchronous=FULL');
+  // Enable foreign keys (enforced by Prisma but belt-and-suspenders)
+  await prisma.$queryRawUnsafe('PRAGMA foreign_keys=ON');
+  console.log('[DB] SQLite WAL mode enabled — crash-safe writes');
+}
+
+async function createStartupBackup() {
+  if (!fs.existsSync(DB_PATH)) return;
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  }
+  try {
+    const stats = fs.statSync(DB_PATH);
+    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `auto-startup-${dateStr}.db`;
+    const filePath = path.join(BACKUPS_DIR, fileName);
+    fs.copyFileSync(DB_PATH, filePath);
+    await prisma.backup.create({
+      data: { fileName, filePath, fileSize: stats.size },
+    });
+    console.log(`[BACKUP] Auto-backup created on startup: ${fileName}`);
+  } catch (err) {
+    console.warn('[BACKUP] Could not create startup backup:', err.message);
+  }
+}
+
+async function createShutdownBackup() {
+  if (!fs.existsSync(DB_PATH)) return;
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  }
+  try {
+    const stats = fs.statSync(DB_PATH);
+    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `auto-shutdown-${dateStr}.db`;
+    const filePath = path.join(BACKUPS_DIR, fileName);
+    fs.copyFileSync(DB_PATH, filePath);
+    await prisma.backup.create({
+      data: { fileName, filePath, fileSize: stats.size },
+    });
+    console.log(`[SHUTDOWN] Auto-backup created: ${fileName}`);
+    return true;
+  } catch (err) {
+    console.warn('[SHUTDOWN] Could not create shutdown backup:', err.message);
+    return false;
+  }
+}
+
+// Simple file-only backup for crash scenarios (no Prisma — state may be corrupted)
+function createEmergencyBackup() {
+  if (!fs.existsSync(DB_PATH)) return;
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    try { fs.mkdirSync(BACKUPS_DIR, { recursive: true }); } catch (e) {}
+  }
+  try {
+    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `auto-emergency-${dateStr}.db`;
+    const filePath = path.join(BACKUPS_DIR, fileName);
+    fs.copyFileSync(DB_PATH, filePath);
+    console.log(`[CRASH] Emergency backup saved: ${fileName}`);
+  } catch (err) {
+    console.error('[CRASH] Could not create emergency backup:', err.message);
+  }
+}
 
 // Middleware
 app.use(cors());
@@ -92,10 +178,70 @@ if (fs.existsSync(frontendDist)) {
 app.use(notFound);
 app.use(errorHandler);
 
+// ─── Server Start (awaited DB init) ──────────────────────────────────────────
+
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  (async () => {
+    // 1. Initialize database (WAL mode + synchronous) before accepting requests
+    await initializeDatabase();
+
+    // 2. Create a startup backup
+    await createStartupBackup();
+
+    // 3. Start the reminder scheduler
+    startReminderScheduler(prisma);
+
+    // 4. Start listening
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+
+    // ─── Graceful Shutdown ──────────────────────────────────────────────────
+
+    async function gracefulShutdown(signal) {
+      console.log('');
+      console.log('━'.repeat(60));
+      console.log(`🛑 [SHUTDOWN] Received ${signal}. Starting graceful shutdown...`);
+
+      // 1. Stop accepting new requests
+      server.close(() => {
+        console.log('[SHUTDOWN] HTTP server closed.');
+      });
+
+      // 2. Stop the reminder scheduler
+      stopReminderScheduler();
+
+      // 3. Create a safety backup
+      await createShutdownBackup();
+
+      // 4. Close the Prisma database connection
+      try {
+        await prisma.$disconnect();
+        console.log('[SHUTDOWN] Database connection closed.');
+      } catch (err) {
+        console.warn('[SHUTDOWN] Error disconnecting database:', err.message);
+      }
+
+      console.log('[SHUTDOWN] Server shut down gracefully.');
+      console.log('━'.repeat(60));
+      process.exit(0);
+    }
+
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+    // Crash handler: file-only backup, no Prisma (state may be corrupted)
+    process.on('uncaughtException', (err) => {
+      console.error('[CRASH] Uncaught exception:', err);
+      createEmergencyBackup();
+      stopReminderScheduler();
+      process.exit(1);
+    });
+
+    process.on('unhandledRejection', (reason) => {
+      console.error('[CRASH] Unhandled rejection:', reason);
+    });
+  })();
 }
 
 module.exports = app;

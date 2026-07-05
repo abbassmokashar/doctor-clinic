@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { medicalRecordAPI, patientAPI, doctorAPI, prescriptionAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   FileText,
-  Search,
   Plus,
   Loader2,
   X,
   Stethoscope,
   Pill,
+  Image,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -26,8 +29,22 @@ export default function MedicalRecordsPage() {
   const [prescriptionForm, setPrescriptionForm] = useState({
     medicationName: '', dosage: '', frequency: '', duration: '', instructions: '',
   });
-  const { isAdmin, isDoctor } = useAuth();
-  const canCreate = isAdmin || isDoctor;
+  const { isAdmin, isDoctor, isReceptionist } = useAuth();
+  const canCreate = isAdmin || isDoctor || isReceptionist;
+
+  // Image upload state
+  const [uploadingRecordId, setUploadingRecordId] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [deletingImageIdx, setDeletingImageIdx] = useState(null);
+  const imageInputRefs = useRef({});
+
+  // Pending images for the create modal (selected but not yet uploaded)
+  const [pendingImages, setPendingImages] = useState([]);
+  const modalFileInputRef = useRef(null);
+
+  // Lightbox state
+  const [lightboxImages, setLightboxImages] = useState(null);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
 
   const fetchRecords = () => {
     if (!selectedPatient) {
@@ -64,14 +81,32 @@ export default function MedicalRecordsPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Create the record first
       const res = await medicalRecordAPI.create(form);
+      const recordId = res.data.id;
+
+      // Upload pending images to the created record
+      let uploadErrors = 0;
+      if (pendingImages.length > 0) {
+        for (const file of pendingImages) {
+          try {
+            const formData = new FormData();
+            formData.append('image', file);
+            await medicalRecordAPI.uploadImage(recordId, formData);
+          } catch (err) {
+            uploadErrors++;
+            console.error('Failed to upload image:', err);
+          }
+        }
+      }
+
       // Create prescriptions for this record
       if (prescriptions.length > 0) {
         let hasError = false;
         for (const p of prescriptions) {
           try {
             await prescriptionAPI.create({
-              medicalRecordId: res.data.id,
+              medicalRecordId: recordId,
               medicationName: p.medicationName,
               dosage: p.dosage,
               frequency: p.frequency,
@@ -87,10 +122,19 @@ export default function MedicalRecordsPage() {
           toast.error('Some prescriptions could not be saved');
         }
       }
+
+      if (uploadErrors > 0) {
+        toast.error(`${uploadErrors} image(s) could not be uploaded`);
+      } else if (pendingImages.length > 0) {
+        toast.success(`${pendingImages.length} image(s) uploaded`);
+      }
+
       toast.success('Medical record created');
+      revokePendingImageUrls();
       setShowModal(false);
       setForm({ patientId: '', doctorId: '', appointmentId: '', diagnosis: '', symptoms: '', notes: '' });
       setPrescriptions([]);
+      setPendingImages([]);
       if (selectedPatient) fetchRecords();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to create record');
@@ -106,8 +150,85 @@ export default function MedicalRecordsPage() {
     setPrescriptionForm({ medicationName: '', dosage: '', frequency: '', duration: '', instructions: '' });
   };
 
+  // Revoke all pending image object URLs to prevent memory leaks
+  const revokePendingImageUrls = useCallback(() => {
+    pendingImages.forEach((file) => {
+      if (file._previewUrl) {
+        URL.revokeObjectURL(file._previewUrl);
+      }
+    });
+  }, [pendingImages]);
+
+  const handleCloseModal = useCallback(() => {
+    revokePendingImageUrls();
+    setPendingImages([]);
+    setShowModal(false);
+  }, [revokePendingImageUrls]);
+
   const removePrescription = (index) => {
     setPrescriptions(prescriptions.filter((_, i) => i !== index));
+  };
+
+  const handleSelectImages = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    // Create preview URLs stored on the file object for later cleanup
+    const withPreviews = files.map((f) => {
+      f._previewUrl = URL.createObjectURL(f);
+      return f;
+    });
+    setPendingImages((prev) => [...prev, ...withPreviews]);
+    e.target.value = '';
+  };
+
+  const removePendingImage = (index) => {
+    setPendingImages((prev) => {
+      const removed = prev[index];
+      if (removed?._previewUrl) URL.revokeObjectURL(removed._previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handleUploadImage = async (recordId, file) => {
+    if (!file) return;
+    setUploadingImage(true);
+    setUploadingRecordId(recordId);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      await medicalRecordAPI.uploadImage(recordId, formData);
+      toast.success('Image uploaded');
+      // Refresh the records to show the new image
+      fetchRecords();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+      setUploadingRecordId(null);
+    }
+  };
+
+  const handleRemoveImage = async (recordId, imageIndex) => {
+    setDeletingImageIdx(imageIndex);
+    try {
+      await medicalRecordAPI.removeImage(recordId, imageIndex);
+      toast.success('Image removed');
+      fetchRecords();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to remove image');
+    } finally {
+      setDeletingImageIdx(null);
+    }
+  };
+
+  const parseImages = (record) => {
+    if (!record.images) return [];
+    try {
+      const parsed = JSON.parse(record.images);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   };
 
   return (
@@ -164,61 +285,138 @@ export default function MedicalRecordsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {records.map((record) => (
-            <div key={record.id} className="card p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-gray-900">{record.diagnosis}</h3>
-                  <p className="text-xs text-gray-500">
-                    Dr. {record.doctor?.user?.name} - {new Date(record.createdAt).toLocaleDateString()}
-                  </p>
+          {records.map((record) => {
+            const recordImages = parseImages(record);
+            return (
+              <div key={record.id} className="card p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{record.diagnosis}</h3>
+                    <p className="text-xs text-gray-500">
+                      Dr. {record.doctor?.user?.name} - {new Date(record.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  {record.appointment && (
+                    <span className="text-xs text-gray-400">
+                      Appointment: {new Date(record.appointment.dateTime).toLocaleDateString()}
+                    </span>
+                  )}
                 </div>
-                {record.appointment && (
-                  <span className="text-xs text-gray-400">
-                    Appointment: {new Date(record.appointment.dateTime).toLocaleDateString()}
-                  </span>
+                {record.symptoms && (
+                  <div className="mb-2">
+                    <span className="text-xs font-medium text-gray-500">Symptoms:</span>
+                    <p className="text-sm text-gray-700">{record.symptoms}</p>
+                  </div>
+                )}
+                {record.notes && (
+                  <div className="mb-3">
+                    <span className="text-xs font-medium text-gray-500">Notes:</span>
+                    <p className="text-sm text-gray-600">{record.notes}</p>
+                  </div>
+                )}
+
+                {/* Images */}
+                {recordImages.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
+                      <Image className="w-3 h-3" /> Images ({recordImages.length})
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {recordImages.map((img, idx) => (
+                        <div key={idx} className="relative group">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLightboxImages(recordImages);
+                              setLightboxIdx(idx);
+                            }}
+                            className="block w-20 h-20 rounded-lg overflow-hidden border border-gray-200 hover:border-primary-400 transition-colors"
+                          >
+                            <img
+                              src={img.url}
+                              alt={img.originalName || `Image ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                          {canCreate && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(record.id, idx)}
+                              disabled={deletingImageIdx === idx}
+                              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                            >
+                              {deletingImageIdx === idx ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <X className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Image upload button */}
+                {canCreate && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <input
+                      ref={(el) => (imageInputRefs.current[record.id] = el)}
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) handleUploadImage(record.id, file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => imageInputRefs.current[record.id]?.click()}
+                      disabled={uploadingImage && uploadingRecordId === record.id}
+                      className="btn-sm btn-secondary text-xs"
+                    >
+                      {uploadingImage && uploadingRecordId === record.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Upload className="w-3 h-3" />
+                      )}
+                      {uploadingImage && uploadingRecordId === record.id ? 'Uploading...' : recordImages.length > 0 ? 'Add Image' : 'Upload Image'}
+                    </button>
+                  </div>
+                )}
+
+                {record.prescriptions?.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
+                      <Pill className="w-3 h-3" /> Prescriptions
+                    </p>
+                    <div className="space-y-1">
+                      {record.prescriptions.map((p) => (
+                        <div key={p.id} className="text-sm text-gray-700 bg-gray-50 rounded px-3 py-1.5">
+                          <span className="font-medium">{p.medicationName}</span> - {p.dosage}, {p.frequency}
+                          {p.duration && ` for ${p.duration}`}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
-              {record.symptoms && (
-                <div className="mb-2">
-                  <span className="text-xs font-medium text-gray-500">Symptoms:</span>
-                  <p className="text-sm text-gray-700">{record.symptoms}</p>
-                </div>
-              )}
-              {record.notes && (
-                <div className="mb-3">
-                  <span className="text-xs font-medium text-gray-500">Notes:</span>
-                  <p className="text-sm text-gray-600">{record.notes}</p>
-                </div>
-              )}
-              {record.prescriptions?.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <p className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1">
-                    <Pill className="w-3 h-3" /> Prescriptions
-                  </p>
-                  <div className="space-y-1">
-                    {record.prescriptions.map((p) => (
-                      <div key={p.id} className="text-sm text-gray-700 bg-gray-50 rounded px-3 py-1.5">
-                        <span className="font-medium">{p.medicationName}</span> - {p.dosage}, {p.frequency}
-                        {p.duration && ` for ${p.duration}`}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {/* Create Record Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setShowModal(false)} />
+          <div className="fixed inset-0 bg-black/50" onClick={handleCloseModal} />
           <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">New Medical Record</h2>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={handleCloseModal} className="p-1 hover:bg-gray-100 rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -247,6 +445,57 @@ export default function MedicalRecordsPage() {
               <div>
                 <label className="label">Notes</label>
                 <textarea className="input" rows={3} value={form.notes} onChange={(e) => setForm({...form, notes: e.target.value})} />
+              </div>
+
+              {/* Images */}
+              <div className="pt-3 border-t border-gray-100">
+                <p className="label flex items-center gap-1">
+                  <Image className="w-4 h-4" /> Images
+                </p>
+                <p className="text-xs text-gray-500 mb-3">
+                  Attach images (X-rays, scans, photos) to this medical record.
+                </p>
+
+                {/* Selected image previews */}
+                {pendingImages.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {pendingImages.map((file, idx) => (
+                      <div key={idx} className="relative group">
+                        <div className="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                          <img
+                            src={file._previewUrl}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePendingImage(idx)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <input
+                  ref={modalFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={handleSelectImages}
+                />
+                <button
+                  type="button"
+                  onClick={() => modalFileInputRef.current?.click()}
+                  className="btn-sm btn-secondary text-xs"
+                >
+                  <Upload className="w-3 h-3" />
+                  {pendingImages.length > 0 ? 'Add More Images' : 'Select Images'}
+                </button>
               </div>
 
               {/* Prescriptions */}
@@ -279,9 +528,69 @@ export default function MedicalRecordsPage() {
 
               <div className="flex gap-3 pt-2">
                 <button type="submit" className="btn-primary flex-1">Create Record</button>
-                <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
+                <button type="button" onClick={handleCloseModal} className="btn-secondary flex-1">Cancel</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxImages && lightboxImages.length > 0 && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center"
+          onClick={() => setLightboxImages(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxImages(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors z-10"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {lightboxImages.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIdx((prev) => (prev - 1 + lightboxImages.length) % lightboxImages.length);
+                }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors z-10"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIdx((prev) => (prev + 1) % lightboxImages.length);
+                }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors z-10"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </>
+          )}
+
+          <div
+            className="max-w-[90vw] max-h-[90vh] flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={lightboxImages[lightboxIdx]?.url}
+              alt={lightboxImages[lightboxIdx]?.originalName || `Image ${lightboxIdx + 1}`}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg"
+            />
+            <div className="mt-3 flex items-center gap-3 text-white/70 text-sm">
+              <span>
+                {lightboxIdx + 1} / {lightboxImages.length}
+              </span>
+              {lightboxImages[lightboxIdx]?.originalName && (
+                <span className="text-white/50">{lightboxImages[lightboxIdx].originalName}</span>
+              )}
+            </div>
           </div>
         </div>
       )}
