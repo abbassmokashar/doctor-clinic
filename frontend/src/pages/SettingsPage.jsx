@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { settingsAPI, backupAPI, whatsappAPI, reminderAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   Settings,
   Palette,
@@ -1084,6 +1085,7 @@ function AccountsTab() {
 function WhatsAppTab() {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const pollingRef = useRef(null);
   const latestStatusRef = useRef(null);
@@ -1115,9 +1117,6 @@ function WhatsAppTab() {
   }, [fetchStatus]);
 
   const handleDisconnect = async () => {
-    if (!window.confirm('Are you sure you want to disconnect WhatsApp? You will need to scan the QR code again to reconnect.')) {
-      return;
-    }
     setDisconnecting(true);
     try {
       await whatsappAPI.disconnect();
@@ -1322,8 +1321,21 @@ function WhatsAppTab() {
         {/* Actions */}
         {(isConnected || isQrReady || isAuthFailure) && (
           <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border-light)' }}>
+            <ConfirmModal
+              open={confirmDisconnect}
+              title="Disconnect WhatsApp"
+              message="Are you sure you want to disconnect WhatsApp? You will need to scan the QR code again to reconnect."
+              confirmLabel="Disconnect"
+              cancelLabel="Cancel"
+              variant="danger"
+              onConfirm={() => {
+                setConfirmDisconnect(false);
+                handleDisconnect();
+              }}
+              onCancel={() => setConfirmDisconnect(false)}
+            />
             <button
-              onClick={handleDisconnect}
+              onClick={() => setConfirmDisconnect(true)}
               disabled={disconnecting}
               className="btn-secondary w-full"
             >
@@ -1622,6 +1634,8 @@ function BackupTab() {
   const [restoring, setRestoring] = useState(false);
   const [restoringId, setRestoringId] = useState(null);
   const [confirmRestore, setConfirmRestore] = useState(null);
+  const [confirmUploadRestore, setConfirmUploadRestore] = useState(false);
+  const [pendingRestoreFile, setPendingRestoreFile] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -1696,12 +1710,14 @@ function BackupTab() {
   const handleRestoreUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // Store the file and show confirm modal
+    setPendingRestoreFile(file);
+    setConfirmUploadRestore(true);
+    // Reset the input so the same file can be re-selected
+    e.target.value = '';
+  };
 
-    if (!window.confirm('Are you sure you want to restore this backup? This will replace all current data. A backup of the current database will be saved automatically.')) {
-      e.target.value = '';
-      return;
-    }
-
+  const executeRestoreUpload = async (file) => {
     setRestoring(true);
     try {
       const formData = new FormData();
@@ -1713,7 +1729,7 @@ function BackupTab() {
       toast.error(error.response?.data?.message || 'Failed to restore database');
     } finally {
       setRestoring(false);
-      e.target.value = '';
+      setPendingRestoreFile(null);
     }
   };
 
@@ -1831,6 +1847,24 @@ function BackupTab() {
           {restoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
           {restoring ? 'Restoring...' : 'Upload Backup File'}
         </button>
+        <ConfirmModal
+          open={confirmUploadRestore}
+          title="Restore Backup"
+          message="Are you sure you want to restore this backup? This will replace all current data. A backup of the current database will be saved automatically."
+          confirmLabel="Restore Backup"
+          cancelLabel="Cancel"
+          variant="danger"
+          onConfirm={() => {
+            setConfirmUploadRestore(false);
+            const file = pendingRestoreFile;
+            setPendingRestoreFile(null);
+            if (file) executeRestoreUpload(file);
+          }}
+          onCancel={() => {
+            setConfirmUploadRestore(false);
+            setPendingRestoreFile(null);
+          }}
+        />
         <input
           ref={fileInputRef}
           type="file"

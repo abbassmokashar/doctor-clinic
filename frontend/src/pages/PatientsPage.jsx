@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { patientAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import MultiTabForm from '../components/MultiTabForm';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   Users,
   Plus,
@@ -12,25 +14,87 @@ import {
   Loader2,
   Edit2,
   Trash2,
-  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const bloodTypes = ['A_POSITIVE', 'A_NEGATIVE', 'B_POSITIVE', 'B_NEGATIVE', 'AB_POSITIVE', 'AB_NEGATIVE', 'O_POSITIVE', 'O_NEGATIVE'];
 const genders = ['MALE', 'FEMALE', 'PREFER_NOT_TO_SAY'];
 
+const INITIAL_FORM = {
+  firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '',
+  address: '', bloodType: '', allergies: '', emergencyContact: '', emergencyPhone: '', notes: '',
+};
+
 export default function PatientsPage() {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({
-    firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '',
-    address: '', bloodType: '', allergies: '', emergencyContact: '', emergencyPhone: '', notes: '',
-  });
+  const [tabs, setTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [pendingCloseId, setPendingCloseId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const { isAdmin, isDoctor, isReceptionist } = useAuth();
   const canEdit = isAdmin || isDoctor || isReceptionist;
+  const tabIdCounter = useRef(0);
+
+  // Persist tabs to localStorage
+  const PATIENT_TABS_KEY = 'patientTabs';
+  const PATIENT_ACTIVE_KEY = 'patientActiveTabId';
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PATIENT_TABS_KEY);
+      const savedActive = localStorage.getItem(PATIENT_ACTIVE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Ensure each restored tab has initialForm (backward compat)
+          const restored = parsed.map((t) => ({
+            ...t,
+            initialForm: t.initialForm || { ...t.form },
+          }));
+          setTabs(restored);
+          if (savedActive) {
+            const activeId = JSON.parse(savedActive);
+            if (restored.some((t) => t.id === activeId)) {
+              setActiveTabId(activeId);
+            } else {
+              setActiveTabId(restored[0].id);
+            }
+          }
+          const maxId = restored.reduce((max, t) => Math.max(max, t.id), 0);
+          tabIdCounter.current = maxId + 1;
+        }
+      }
+    } catch {
+      // Ignore parse errors — just start fresh
+    }
+  }, []);
+
+  // Debounced save to localStorage + immediate save on tab close/refresh
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(PATIENT_TABS_KEY, JSON.stringify(tabs));
+        localStorage.setItem(PATIENT_ACTIVE_KEY, JSON.stringify(activeTabId));
+      } catch {
+        // localStorage might be full
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [tabs, activeTabId]);
+
+  useEffect(() => {
+    const save = () => {
+      try {
+        localStorage.setItem(PATIENT_TABS_KEY, JSON.stringify(tabs));
+        localStorage.setItem(PATIENT_ACTIVE_KEY, JSON.stringify(activeTabId));
+      } catch {}
+    };
+    window.addEventListener('beforeunload', save);
+    return () => window.removeEventListener('beforeunload', save);
+  }, [tabs, activeTabId]);
 
   const fetchPatients = () => {
     setLoading(true);
@@ -46,46 +110,85 @@ export default function PatientsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const openTab = useCallback((editingPatient = null) => {
+    const id = ++tabIdCounter.current;
+    const form = editingPatient
+      ? {
+          firstName: editingPatient.firstName || '',
+          lastName: editingPatient.lastName || '',
+          dateOfBirth: editingPatient.dateOfBirth ? editingPatient.dateOfBirth.split('T')[0] : '',
+          gender: editingPatient.gender || '',
+          phone: editingPatient.phone || '',
+          email: editingPatient.email || '',
+          address: editingPatient.address || '',
+          bloodType: editingPatient.bloodType || '',
+          allergies: editingPatient.allergies || '',
+          emergencyContact: editingPatient.emergencyContact || '',
+          emergencyPhone: editingPatient.emergencyPhone || '',
+          notes: editingPatient.notes || '',
+        }
+      : { ...INITIAL_FORM };
+    const newTab = {
+      id,
+      title: editingPatient ? `Edit: ${editingPatient.firstName} ${editingPatient.lastName}` : 'New Patient',
+      form,
+      initialForm: { ...form },
+      type: editingPatient ? 'update' : 'create',
+      recordId: editingPatient?.id || null,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(id);
+  }, []);
+
+  const forceCloseTab = useCallback((id) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      const next = prev.filter((t) => t.id !== id);
+      if (next.length === 0) {
+        setActiveTabId(null);
+      } else {
+        setActiveTabId((currentActive) =>
+          currentActive === id
+            ? next[Math.min(idx, next.length - 1)].id
+            : currentActive
+        );
+      }
+      return next;
+    });
+  }, []);
+
+  const closeTab = useCallback((id, force = false) => {
+    // Confirm if the tab has unsaved changes (unless forced)
+    if (!force) {
+      const tab = tabs.find((t) => t.id === id);
+      if (tab && tab.initialForm && JSON.stringify(tab.form) !== JSON.stringify(tab.initialForm)) {
+        setPendingCloseId(id);
+        return;
+      }
+    }
+    forceCloseTab(id);
+  }, [tabs, forceCloseTab]);
+
+  const handleSubmitTab = async (tab) => {
+    setSubmitting(true);
     try {
-      if (editing) {
-        await patientAPI.update(editing.id, form);
+      if (tab.type === 'update' && tab.recordId) {
+        await patientAPI.update(tab.recordId, tab.form);
         toast.success('Patient updated successfully');
       } else {
-        await patientAPI.create(form);
+        await patientAPI.create(tab.form);
         toast.success('Patient created successfully');
       }
-      setShowModal(false);
-      setEditing(null);
-      setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodType: '', allergies: '', emergencyContact: '', emergencyPhone: '', notes: '' });
+      closeTab(tab.id, true);
       fetchPatients();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Operation failed');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleEdit = (patient) => {
-    setEditing(patient);
-    setForm({
-      firstName: patient.firstName || '',
-      lastName: patient.lastName || '',
-      dateOfBirth: patient.dateOfBirth ? patient.dateOfBirth.split('T')[0] : '',
-      gender: patient.gender || '',
-      phone: patient.phone || '',
-      email: patient.email || '',
-      address: patient.address || '',
-      bloodType: patient.bloodType || '',
-      allergies: patient.allergies || '',
-      emergencyContact: patient.emergencyContact || '',
-      emergencyPhone: patient.emergencyPhone || '',
-      notes: patient.notes || '',
-    });
-    setShowModal(true);
-  };
-
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure?')) return;
     try {
       await patientAPI.delete(id);
       toast.success('Patient deleted');
@@ -95,6 +198,65 @@ export default function PatientsPage() {
     }
   };
 
+  const renderPatientForm = (tab, onFieldChange) => (
+    <div className="max-w-lg grid grid-cols-2 gap-4">
+      <div className="col-span-2 sm:col-span-1">
+        <label className="label">First Name *</label>
+        <input type="text" className="input" value={tab.form.firstName} onChange={(e) => onFieldChange({ ...tab.form, firstName: e.target.value })} required />
+      </div>
+      <div className="col-span-2 sm:col-span-1">
+        <label className="label">Last Name *</label>
+        <input type="text" className="input" value={tab.form.lastName} onChange={(e) => onFieldChange({ ...tab.form, lastName: e.target.value })} required />
+      </div>
+      <div>
+        <label className="label">Date of Birth</label>
+        <input type="date" className="input" value={tab.form.dateOfBirth} onChange={(e) => onFieldChange({ ...tab.form, dateOfBirth: e.target.value })} />
+      </div>
+      <div>
+        <label className="label">Gender</label>
+        <select className="input" value={tab.form.gender} onChange={(e) => onFieldChange({ ...tab.form, gender: e.target.value })}>
+          <option value="">Select...</option>
+          {genders.map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="label">Phone *</label>
+        <input type="text" className="input" value={tab.form.phone} onChange={(e) => onFieldChange({ ...tab.form, phone: e.target.value })} required />
+      </div>
+      <div>
+        <label className="label">Email</label>
+        <input type="email" className="input" value={tab.form.email} onChange={(e) => onFieldChange({ ...tab.form, email: e.target.value })} />
+      </div>
+      <div className="col-span-2">
+        <label className="label">Address</label>
+        <input type="text" className="input" value={tab.form.address} onChange={(e) => onFieldChange({ ...tab.form, address: e.target.value })} />
+      </div>
+      <div>
+        <label className="label">Blood Type</label>
+        <select className="input" value={tab.form.bloodType} onChange={(e) => onFieldChange({ ...tab.form, bloodType: e.target.value })}>
+          <option value="">Select...</option>
+          {bloodTypes.map((b) => <option key={b} value={b}>{b.replace('_', ' ')}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="label">Allergies</label>
+        <input type="text" className="input" value={tab.form.allergies} onChange={(e) => onFieldChange({ ...tab.form, allergies: e.target.value })} />
+      </div>
+      <div>
+        <label className="label">Emergency Contact</label>
+        <input type="text" className="input" value={tab.form.emergencyContact} onChange={(e) => onFieldChange({ ...tab.form, emergencyContact: e.target.value })} />
+      </div>
+      <div>
+        <label className="label">Emergency Phone</label>
+        <input type="text" className="input" value={tab.form.emergencyPhone} onChange={(e) => onFieldChange({ ...tab.form, emergencyPhone: e.target.value })} />
+      </div>
+      <div className="col-span-2">
+        <label className="label">Notes</label>
+        <textarea className="input" rows={2} value={tab.form.notes} onChange={(e) => onFieldChange({ ...tab.form, notes: e.target.value })} />
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -103,14 +265,7 @@ export default function PatientsPage() {
           <p className="text-gray-500 mt-1">Manage patient records and medical history</p>
         </div>
         {canEdit && (
-          <button
-            onClick={() => {
-              setEditing(null);
-              setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodType: '', allergies: '', emergencyContact: '', emergencyPhone: '', notes: '' });
-              setShowModal(true);
-            }}
-            className="btn-primary"
-          >
+          <button onClick={() => openTab()} className="btn-primary">
             <Plus className="w-4 h-4" />
             Add Patient
           </button>
@@ -182,10 +337,10 @@ export default function PatientsPage() {
 
               {canEdit && (
                 <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={(e) => { e.preventDefault(); handleEdit(patient); }} className="btn-sm btn-secondary">
+                  <button onClick={(e) => { e.preventDefault(); openTab(patient); }} className="btn-sm btn-secondary">
                     <Edit2 className="w-3 h-3" /> Edit
                   </button>
-                  <button onClick={(e) => { e.preventDefault(); handleDelete(patient.id); }} className="btn-sm btn-danger">
+                  <button onClick={(e) => { e.preventDefault(); setConfirmDeleteId(patient.id); }} className="btn-sm btn-danger">
                     <Trash2 className="w-3 h-3" /> Delete
                   </button>
                 </div>
@@ -195,80 +350,52 @@ export default function PatientsPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setShowModal(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">{editing ? 'Edit Patient' : 'Add Patient'}</h2>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 sm:col-span-1">
-                <label className="label">First Name *</label>
-                <input type="text" className="input" value={form.firstName} onChange={(e) => setForm({...form, firstName: e.target.value})} required />
-              </div>
-              <div className="col-span-2 sm:col-span-1">
-                <label className="label">Last Name *</label>
-                <input type="text" className="input" value={form.lastName} onChange={(e) => setForm({...form, lastName: e.target.value})} required />
-              </div>
-              <div>
-                <label className="label">Date of Birth</label>
-                <input type="date" className="input" value={form.dateOfBirth} onChange={(e) => setForm({...form, dateOfBirth: e.target.value})} />
-              </div>
-              <div>
-                <label className="label">Gender</label>
-                <select className="input" value={form.gender} onChange={(e) => setForm({...form, gender: e.target.value})}>
-                  <option value="">Select...</option>
-                  {genders.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Phone *</label>
-                <input type="text" className="input" value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} required />
-              </div>
-              <div>
-                <label className="label">Email</label>
-                <input type="email" className="input" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} />
-              </div>
-              <div className="col-span-2">
-                <label className="label">Address</label>
-                <input type="text" className="input" value={form.address} onChange={(e) => setForm({...form, address: e.target.value})} />
-              </div>
-              <div>
-                <label className="label">Blood Type</label>
-                <select className="input" value={form.bloodType} onChange={(e) => setForm({...form, bloodType: e.target.value})}>
-                  <option value="">Select...</option>
-                  {bloodTypes.map((b) => <option key={b} value={b}>{b.replace('_', ' ')}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Allergies</label>
-                <input type="text" className="input" value={form.allergies} onChange={(e) => setForm({...form, allergies: e.target.value})} />
-              </div>
-              <div>
-                <label className="label">Emergency Contact</label>
-                <input type="text" className="input" value={form.emergencyContact} onChange={(e) => setForm({...form, emergencyContact: e.target.value})} />
-              </div>
-              <div>
-                <label className="label">Emergency Phone</label>
-                <input type="text" className="input" value={form.emergencyPhone} onChange={(e) => setForm({...form, emergencyPhone: e.target.value})} />
-              </div>
-              <div className="col-span-2">
-                <label className="label">Notes</label>
-                <textarea className="input" rows={2} value={form.notes} onChange={(e) => setForm({...form, notes: e.target.value})} />
-              </div>
-              <div className="col-span-2 flex gap-3 pt-2">
-                <button type="submit" className="btn-primary flex-1">{editing ? 'Update' : 'Create'}</button>
-                <button type="button" onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Multi-tab Form Panel */}
+      <MultiTabForm
+        tabs={tabs}
+        activeId={activeTabId}
+        onSelect={setActiveTabId}
+        onClose={closeTab}
+        onFormChange={(id, newForm) => {
+          setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, form: newForm } : t)));
+        }}
+        renderForm={renderPatientForm}
+        onSubmit={handleSubmitTab}
+        submitLabel={tabs.find((t) => t.id === activeTabId)?.type === 'update' ? 'Update Patient' : 'Create Patient'}
+        submitting={submitting}
+      />
+
+      {/* Unsaved Changes Confirm Modal */}
+      <ConfirmModal
+        open={pendingCloseId !== null}
+        title="Unsaved Changes"
+        message="You have unsaved changes in this form. Are you sure you want to discard them?"
+        confirmLabel="Discard Changes"
+        cancelLabel="Keep Editing"
+        variant="warning"
+        onConfirm={() => {
+          const id = pendingCloseId;
+          setPendingCloseId(null);
+          forceCloseTab(id);
+        }}
+        onCancel={() => setPendingCloseId(null)}
+      />
+
+      {/* Delete Patient Confirm Modal */}
+      <ConfirmModal
+        open={confirmDeleteId !== null}
+        title="Delete Patient"
+        message="Are you sure you want to delete this patient? This action cannot be undone. All associated data will be permanently removed."
+        confirmLabel="Delete Patient"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          const id = confirmDeleteId;
+          setConfirmDeleteId(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

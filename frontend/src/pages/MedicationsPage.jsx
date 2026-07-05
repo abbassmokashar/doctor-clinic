@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { medicationAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   Pill,
   Plus,
@@ -22,6 +23,7 @@ export default function MedicationsPage() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [form, setForm] = useState({ name: '', description: '', manufacturer: '', dosageForm: '', sideEffects: '' });
   const { isAdmin, isDoctor } = useAuth();
   const canEdit = isAdmin || isDoctor;
@@ -72,7 +74,6 @@ export default function MedicationsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this medication?')) return;
     try {
       await medicationAPI.delete(id);
       toast.success('Medication deleted');
@@ -149,7 +150,7 @@ export default function MedicationsPage() {
                   <button onClick={() => handleEdit(med)} className="btn-sm btn-secondary">
                     <Edit2 className="w-3 h-3" /> Edit
                   </button>
-                  <button onClick={() => handleDelete(med.id)} className="btn-sm btn-danger">
+                  <button onClick={() => setConfirmDeleteId(med.id)} className="btn-sm btn-danger">
                     <Trash2 className="w-3 h-3" /> Delete
                   </button>
                 </div>
@@ -202,6 +203,22 @@ export default function MedicationsPage() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirm Modal */}
+      <ConfirmModal
+        open={confirmDeleteId !== null}
+        title="Delete Medication"
+        message="Are you sure you want to delete this medication? All associated data will be permanently removed."
+        confirmLabel="Delete Medication"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          const id = confirmDeleteId;
+          setConfirmDeleteId(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

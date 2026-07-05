@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { departmentAPI, doctorAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   Building2,
   Plus,
@@ -21,6 +22,7 @@ export default function DepartmentsPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', description: '' });
   const [showAddDoctor, setShowAddDoctor] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const { isAdmin } = useAuth();
 
@@ -60,7 +62,6 @@ export default function DepartmentsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this department?')) return;
     try {
       await departmentAPI.delete(id);
       toast.success('Department deleted');
@@ -136,7 +137,7 @@ export default function DepartmentsPage() {
                     <button onClick={() => { setEditing(dept); setForm({ name: dept.name, description: dept.description || '' }); setShowModal(true); }} className="btn-sm btn-secondary">
                       <Edit2 className="w-3 h-3" />
                     </button>
-                    <button onClick={() => handleDelete(dept.id)} className="btn-sm btn-danger">
+                    <button onClick={() => setConfirmDeleteId(dept.id)} className="btn-sm btn-danger">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
@@ -221,6 +222,22 @@ export default function DepartmentsPage() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirm Modal */}
+      <ConfirmModal
+        open={confirmDeleteId !== null}
+        title="Delete Department"
+        message="Are you sure you want to delete this department? All associated data will be permanently removed."
+        confirmLabel="Delete Department"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          const id = confirmDeleteId;
+          setConfirmDeleteId(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

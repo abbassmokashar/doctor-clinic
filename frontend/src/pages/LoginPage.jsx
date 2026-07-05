@@ -101,6 +101,19 @@ export default function LoginPage() {
             </button>
           </form>
         </div>
+
+        {/* Dev credit */}
+        <p className="text-center text-xs text-gray-400 mt-6">
+          Developed by{' '}
+          <a
+            href="https://techmindset-lb.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary-600 hover:text-primary-700 font-medium transition-colors"
+          >
+            Tech Mindset Lb
+          </a>
+        </p>
       </div>
     </div>
   );

@@ -147,6 +147,20 @@ export default function Layout() {
                 </>
               )}
             </div>
+            {/* Dev credit */}
+            <div className="mt-3 pt-3 border-t border-gray-100 text-center">
+              <p className="text-[10px] text-gray-400">
+                Developed by{' '}
+                <a
+                  href="https://techmindset-lb.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                >
+                  Tech Mindset Lb
+                </a>
+              </p>
+            </div>
           </div>
         </div>
       </aside>

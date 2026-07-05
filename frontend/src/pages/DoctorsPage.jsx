@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { doctorAPI, departmentAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
 import {
   Stethoscope,
   Plus,
@@ -23,6 +24,7 @@ export default function DoctorsPage() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -90,7 +92,6 @@ export default function DoctorsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this doctor?')) return;
     try {
       await doctorAPI.delete(id);
       toast.success('Doctor deleted successfully');
@@ -210,7 +211,7 @@ export default function DoctorsPage() {
                   <button
                     onClick={(e) => {
                       e.preventDefault();
-                      handleDelete(doctor.id);
+                      setConfirmDeleteId(doctor.id);
                     }}
                     className="btn-sm btn-danger"
                   >
@@ -310,6 +311,22 @@ export default function DoctorsPage() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirm Modal */}
+      <ConfirmModal
+        open={confirmDeleteId !== null}
+        title="Delete Doctor"
+        message="Are you sure you want to delete this doctor? All associated data will be permanently removed."
+        confirmLabel="Delete Doctor"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          const id = confirmDeleteId;
+          setConfirmDeleteId(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }
