@@ -24,6 +24,7 @@ import {
   RotateCcw,
   Zap,
   Activity,
+  Search,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -99,6 +100,32 @@ export default function AppointmentsPage() {
   const [showQuickPatientForm, setShowQuickPatientForm] = useState(false);
   const [quickPatientForm, setQuickPatientForm] = useState({ firstName: '', lastName: '', phone: '' });
   const [quickPatientSubmitting, setQuickPatientSubmitting] = useState(false);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const comboboxRef = useRef(null);
+  const [doctorSearch, setDoctorSearch] = useState('');
+  const [doctorDropdownOpen, setDoctorDropdownOpen] = useState(false);
+  const doctorComboboxRef = useRef(null);
+
+  const filteredPatients = useMemo(() => {
+    if (!patientSearch) return patients;
+    const q = patientSearch.toLowerCase();
+    return patients.filter((p) =>
+      p.firstName.toLowerCase().includes(q) ||
+      p.lastName.toLowerCase().includes(q) ||
+      p.phone.includes(q) ||
+      (p.email && p.email.toLowerCase().includes(q))
+    );
+  }, [patients, patientSearch]);
+
+  const filteredDoctors = useMemo(() => {
+    if (!doctorSearch) return doctors;
+    const q = doctorSearch.toLowerCase();
+    return doctors.filter((d) =>
+      (d.user?.name?.toLowerCase() || '').includes(q) ||
+      (d.specialization?.toLowerCase() || '').includes(q)
+    );
+  }, [doctors, doctorSearch]);
   const { isAdmin, isDoctor, isReceptionist } = useAuth();
   const canEdit = isAdmin || isDoctor || isReceptionist;
   const tabIdCounter = useRef(0);
@@ -616,7 +643,7 @@ export default function AppointmentsPage() {
         <div className="flex items-center gap-3">
           {canEdit && (
             <>
-              <button onClick={() => { setWalkInForm({ doctorId: '', patientId: '', reason: '' }); setWalkInWarnings([]); setWalkInConfirmOverlap(false); setShowQuickPatientForm(false); setQuickPatientForm({ firstName: '', lastName: '', phone: '' }); setShowWalkInModal(true); }} className="btn-walkin">
+              <button onClick={() => { setWalkInForm({ doctorId: '', patientId: '', reason: '' }); setWalkInWarnings([]); setWalkInConfirmOverlap(false); setShowQuickPatientForm(false); setQuickPatientForm({ firstName: '', lastName: '', phone: '' }); setPatientSearch(''); setDropdownOpen(false); setDoctorSearch(''); setDoctorDropdownOpen(false); setShowWalkInModal(true); }} className="btn-walkin">
                 <Zap className="w-4 h-4" />
                 Walk-in
               </button>
@@ -1067,12 +1094,142 @@ export default function AppointmentsPage() {
             </div>
 
             <div className="space-y-4">
-              <div>
+              <div className="relative">
                 <label className="label">Doctor *</label>
-                <select className="input" value={walkInForm.doctorId} onChange={(e) => { setWalkInForm({ ...walkInForm, doctorId: e.target.value }); setWalkInWarnings([]); setWalkInConfirmOverlap(false); }} required>
-                  <option value="">Select doctor...</option>
-                  {doctors.map((d) => <option key={d.id} value={d.id}>{d.user?.name} - {d.specialization}{d.consultationFee ? ` ($${d.consultationFee})` : ''}</option>)}
-                </select>
+                {/* ── Doctor Combobox Input ── */}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
+                  <input
+                    ref={doctorComboboxRef}
+                    type="text"
+                    placeholder="Search doctor by name..."
+                    className="w-full rounded-lg text-sm transition-all duration-150"
+                    style={{
+                      backgroundColor: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      color: walkInForm.doctorId ? 'var(--primary-700)' : 'var(--text-body)',
+                      padding: '0.5rem 2rem 0.5rem 2rem',
+                      outline: 'none',
+                      fontWeight: walkInForm.doctorId ? 500 : 400,
+                    }}
+                    value={walkInForm.doctorId ? (doctors.find((d) => String(d.id) === walkInForm.doctorId)?.user?.name || doctorSearch) : doctorSearch}
+                    onChange={(e) => { setDoctorSearch(e.target.value); setWalkInForm((prev) => ({ ...prev, doctorId: '' })); setWalkInWarnings([]); setWalkInConfirmOverlap(false); setDoctorDropdownOpen(true); }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary-500)'; e.currentTarget.style.boxShadow = '0 0 0 1px var(--primary-500)'; setDoctorDropdownOpen(true); }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; setTimeout(() => setDoctorDropdownOpen(false), 180); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setDoctorDropdownOpen(false); e.currentTarget.blur(); }
+                      if (e.key === 'ArrowDown' && doctorDropdownOpen) {
+                        e.preventDefault();
+                        const list = document.getElementById('doctor-combobox-list');
+                        if (list) { const first = list.querySelector('button'); first?.focus(); }
+                      }
+                    }}
+                  />
+                  {walkInForm.doctorId ? (
+                    <button type="button" onClick={() => { setWalkInForm({ ...walkInForm, doctorId: '' }); setDoctorSearch(''); setWalkInWarnings([]); doctorComboboxRef.current?.focus(); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/10 transition-colors" aria-label="Clear doctor selection" style={{ color: 'var(--text-muted)' }}>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : doctorSearch ? (
+                    <button type="button" onClick={() => { setDoctorSearch(''); doctorComboboxRef.current?.focus(); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/10 transition-colors" aria-label="Clear search" style={{ color: 'var(--text-muted)' }}>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+
+                {/* ── Doctor Dropdown ── */}
+                {doctorDropdownOpen && !walkInForm.doctorId && (
+                  <div
+                    id="doctor-combobox-list"
+                    className="absolute z-10 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-lg shadow-lg"
+                    style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {filteredDoctors.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-center" style={{ color: 'var(--text-muted)' }}>
+                        {doctorSearch ? `No doctor found for "${doctorSearch}"` : 'Start typing to search doctors'}
+                      </div>
+                    ) : (
+                      filteredDoctors.slice(0, 20).map((d, idx) => {
+                        const initials = (d.user?.name || 'Dr').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+                        const isAvailable = d.isAvailable !== false;
+                        return (
+                          <button
+                            key={d.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center gap-2"
+                            style={{
+                              backgroundColor: 'transparent',
+                              color: isAvailable ? 'var(--text-body)' : 'var(--text-muted)',
+                              borderBottom: idx < Math.min(filteredDoctors.length, 20) - 1 ? '1px solid var(--border-light)' : 'none',
+                            }}
+                            onFocus={(e) => e.currentTarget.style.backgroundColor = 'var(--primary-50)'}
+                            onBlur={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            onClick={() => {
+                              setWalkInForm({ ...walkInForm, doctorId: String(d.id) });
+                              setWalkInWarnings([]);
+                              setWalkInConfirmOverlap(false);
+                              setDoctorSearch('');
+                              setDoctorDropdownOpen(false);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                const next = e.currentTarget.nextElementSibling;
+                                if (next && next.tagName === 'BUTTON') next.focus();
+                              }
+                              if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                const prev = e.currentTarget.previousElementSibling;
+                                if (prev && prev.tagName === 'BUTTON') prev.focus();
+                                else doctorComboboxRef.current?.focus();
+                              }
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.currentTarget.click();
+                              }
+                              if (e.key === 'Escape') setDoctorDropdownOpen(false);
+                            }}
+                          >
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0" style={{ backgroundColor: 'var(--primary-100)', color: 'var(--primary-700)' }}>
+                              {initials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate flex items-center gap-1.5">
+                                {d.user?.name}
+                                {!isAvailable && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--gray-200)', color: 'var(--text-muted)' }}>Unavailable</span>
+                                )}
+                              </div>
+                              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{d.specialization}{d.consultationFee ? ` · $${d.consultationFee}` : ''}</div>
+                            </div>
+                            {isAvailable && <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--stat-emerald)' }} title="Available" />}
+                          </button>
+                        );
+                      })
+                    )}
+                    {filteredDoctors.length > 20 && (
+                      <div className="px-3 py-2 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+                        + {filteredDoctors.length - 20} more results — refine your search
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Selected doctor chip */}
+                {walkInForm.doctorId && (
+                  <div className="mt-1.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs" style={{ backgroundColor: 'var(--primary-50)', color: 'var(--primary-700)', border: '1px solid var(--primary-200)' }}>
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ backgroundColor: 'var(--primary-200)', color: 'var(--primary-700)' }}>
+                      {(() => { const d = doctors.find((d) => String(d.id) === walkInForm.doctorId); return d ? (d.user?.name || 'Dr').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : '?'; })()}
+                    </div>
+                    <span className="font-medium">{doctors.find((d) => String(d.id) === walkInForm.doctorId)?.user?.name}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>· {doctors.find((d) => String(d.id) === walkInForm.doctorId)?.specialization}</span>
+                    <button type="button" onClick={() => { setWalkInForm({ ...walkInForm, doctorId: '' }); setDoctorSearch(''); setWalkInWarnings([]); doctorComboboxRef.current?.focus(); }} className="ml-auto p-0.5 rounded hover:bg-black/10 transition-colors" aria-label="Change doctor">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -1139,10 +1296,144 @@ export default function AppointmentsPage() {
                     </div>
                   </div>
                 ) : (
-                  <select className="input" value={walkInForm.patientId} onChange={(e) => { setWalkInForm({ ...walkInForm, patientId: e.target.value }); setWalkInWarnings([]); setWalkInConfirmOverlap(false); }} required>
-                    <option value="">Select patient...</option>
-                    {patients.map((p) => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} - {p.phone}</option>)}
-                  </select>
+                  <div className="relative">
+                    {/* ── Combobox Input ── */}
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
+                      <input
+                        ref={comboboxRef}
+                        type="text"
+                        placeholder="Search patient by name, phone, or email..."
+                        className="w-full rounded-lg text-sm transition-all duration-150"
+                        style={{
+                          backgroundColor: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          color: walkInForm.patientId ? 'var(--primary-700)' : 'var(--text-body)',
+                          padding: '0.5rem 2rem 0.5rem 2rem',
+                          outline: 'none',
+                          fontWeight: walkInForm.patientId ? 500 : 400,
+                        }}
+                        value={walkInForm.patientId ? (patients.find((p) => String(p.id) === walkInForm.patientId)?.firstName + ' ' + patients.find((p) => String(p.id) === walkInForm.patientId)?.lastName) || patientSearch : patientSearch}
+                        onChange={(e) => { setPatientSearch(e.target.value); setWalkInForm((prev) => ({ ...prev, patientId: '' })); setWalkInWarnings([]); setWalkInConfirmOverlap(false); setDropdownOpen(true); }}
+                        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary-500)'; e.currentTarget.style.boxShadow = '0 0 0 1px var(--primary-500)'; setDropdownOpen(true); }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; setTimeout(() => setDropdownOpen(false), 180); }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') { setDropdownOpen(false); e.currentTarget.blur(); }
+                          if (e.key === 'ArrowDown' && dropdownOpen) {
+                            e.preventDefault();
+                            const list = document.getElementById('patient-combobox-list');
+                            if (list) { const first = list.querySelector('button'); first?.focus(); }
+                          }
+                        }}
+                      />
+                      {/* Clear / Deselect button */}
+                      {walkInForm.patientId ? (
+                        <button type="button" onClick={() => { setWalkInForm({ ...walkInForm, patientId: '' }); setPatientSearch(''); setWalkInWarnings([]); comboboxRef.current?.focus(); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/10 transition-colors" aria-label="Clear selection" style={{ color: 'var(--text-muted)' }}>
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      ) : patientSearch ? (
+                        <button type="button" onClick={() => { setPatientSearch(''); comboboxRef.current?.focus(); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/10 transition-colors" aria-label="Clear search" style={{ color: 'var(--text-muted)' }}>
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {/* ── Dropdown ── */}
+                    {dropdownOpen && !walkInForm.patientId && (
+                      <div
+                        id="patient-combobox-list"
+                        className="absolute z-10 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-lg shadow-lg"
+                        style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
+                        onMouseDown={(e) => e.preventDefault()} /* prevent blur before click */
+                      >
+                        {filteredPatients.length === 0 ? (
+                          <div className="px-3 py-3 text-xs text-center" style={{ color: 'var(--text-muted)' }}>
+                            {patientSearch ? (
+                              <>
+                                No patient found for "{patientSearch}"<button type="button" onClick={() => { setShowQuickPatientForm(true); setDropdownOpen(false); }} className="block mx-auto mt-2 font-medium" style={{ color: 'var(--primary-600)' }}>
+                                                                  + Create new patient
+                                                                </button>
+                              </>
+                            ) : (
+                              'Start typing to search patients'
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            {filteredPatients.slice(0, 20).map((p, idx) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center gap-2"
+                                style={{
+                                  backgroundColor: 'transparent',
+                                  color: 'var(--text-body)',
+                                  borderBottom: idx < Math.min(filteredPatients.length, 20) - 1 ? '1px solid var(--border-light)' : 'none',
+                                }}
+                                onFocus={(e) => e.currentTarget.style.backgroundColor = 'var(--primary-50)'}
+                                onBlur={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                onClick={() => {
+                                  setWalkInForm({ ...walkInForm, patientId: String(p.id) });
+                                  setWalkInWarnings([]);
+                                  setWalkInConfirmOverlap(false);
+                                  setPatientSearch('');
+                                  setDropdownOpen(false);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    const next = e.currentTarget.nextElementSibling;
+                                    if (next && next.tagName === 'BUTTON') next.focus();
+                                  }
+                                  if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    const prev = e.currentTarget.previousElementSibling;
+                                    if (prev && prev.tagName === 'BUTTON') prev.focus();
+                                    else comboboxRef.current?.focus();
+                                  }
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.currentTarget.click();
+                                  }
+                                  if (e.key === 'Escape') setDropdownOpen(false);
+                                }}
+                              >
+                                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0" style={{ backgroundColor: 'var(--primary-100)', color: 'var(--primary-700)' }}>
+                                  {p.firstName[0]}{p.lastName[0]}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium truncate">{p.firstName} {p.lastName}</div>
+                                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.phone}</div>
+                                </div>
+                                {p.email && <span className="text-xs truncate max-w-[120px]" style={{ color: 'var(--text-muted)' }}>{p.email}</span>}
+                              </button>
+                            ))}
+                            {filteredPatients.length > 20 && (
+                              <div className="px-3 py-2 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+                                + {filteredPatients.length - 20} more results — refine your search
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Selected patient chip */}
+                    {walkInForm.patientId && (
+                      <div className="mt-1.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs" style={{ backgroundColor: 'var(--primary-50)', color: 'var(--primary-700)', border: '1px solid var(--primary-200)' }}>
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ backgroundColor: 'var(--primary-200)', color: 'var(--primary-700)' }}>
+                          {(() => { const p = patients.find((p) => String(p.id) === walkInForm.patientId); return p ? p.firstName[0] + p.lastName[0] : '?'; })()}
+                        </div>
+                        <span className="font-medium">{patients.find((p) => String(p.id) === walkInForm.patientId)?.firstName} {patients.find((p) => String(p.id) === walkInForm.patientId)?.lastName}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>· {patients.find((p) => String(p.id) === walkInForm.patientId)?.phone}</span>
+                        <button type="button" onClick={() => { setWalkInForm({ ...walkInForm, patientId: '' }); setPatientSearch(''); setWalkInWarnings([]); comboboxRef.current?.focus(); }} className="ml-auto p-0.5 rounded hover:bg-black/10 transition-colors" aria-label="Change patient">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               <div>
