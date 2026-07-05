@@ -17,6 +17,8 @@ import {
   Send,
   AlertTriangle,
   Pencil,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -69,6 +71,13 @@ export default function AppointmentsPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filterStatus, setFilterStatus] = useState('');
+  const [dateStart, setDateStart] = useState('');
+  const [dateEnd, setDateEnd] = useState('');
+  const [sortBy, setSortBy] = useState('dateTime');
+  const [sortOrder, setSortOrder] = useState('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const [showDayPanel, setShowDayPanel] = useState(false);
   const [tabs, setTabs] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
@@ -239,12 +248,13 @@ export default function AppointmentsPage() {
 
   const fetchAppointments = (start, end) => {
     setLoading(true);
-    const params = {};
+    const params = { start: start.toISOString(), end: end.toISOString(), limit: 200 };
     if (filterStatus) params.status = filterStatus;
-    params.start = start.toISOString();
-    params.end = end.toISOString();
     appointmentAPI.getAll(params)
-      .then((res) => setAppointments(res.data))
+      .then((res) => {
+        const data = Array.isArray(res.data) ? res.data : res.data.data;
+        setAppointments(data);
+      })
       .catch(() => toast.error('Failed to load appointments'))
       .finally(() => setLoading(false));
   };
@@ -266,16 +276,30 @@ export default function AppointmentsPage() {
   useEffect(() => {
     if (viewMode === 'list') {
       setLoading(true);
-      const params = {};
+      const params = { page: currentPage, limit: 20, sortBy, sortOrder };
       if (filterStatus) params.status = filterStatus;
+      if (dateStart) params.start = new Date(dateStart + 'T00:00:00').toISOString();
+      if (dateEnd) params.end = new Date(dateEnd + 'T23:59:59').toISOString();
+      if (!dateStart && !dateEnd) {
+        // Default: last 30 days
+        const d = new Date();
+        d.setDate(d.getDate() - 90);
+        params.start = d.toISOString();
+        params.end = new Date().toISOString();
+      }
       appointmentAPI.getAll(params)
-        .then((res) => setAppointments(res.data))
+        .then((res) => {
+          setAppointments(res.data.data);
+          setTotalCount(res.data.total);
+          setTotalPages(res.data.totalPages);
+          setCurrentPage(res.data.page);
+        })
         .catch(() => toast.error('Failed to load appointments'))
         .finally(() => setLoading(false));
     } else if (viewMode === 'calendar') {
       refreshCalendar();
     }
-  }, [currentMonth, filterStatus, viewMode]);
+  }, [currentMonth, filterStatus, viewMode, currentPage, sortBy, sortOrder, dateStart, dateEnd]);
 
   const navigateMonth = (delta) => {
     setCurrentMonth(new Date(year, month + delta, 1));
@@ -597,22 +621,44 @@ export default function AppointmentsPage() {
           </div>
           <div className="relative">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select className="input pl-10 pr-8 text-sm" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <select className="input pl-10 pr-8 text-sm" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}>
               <option value="">All Statuses</option>
               {statuses.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
             </select>
           </div>
         </div>
-        {viewMode === 'calendar' && (
-          <div className="flex items-center gap-2">
-            <button onClick={goToToday} className="btn-sm btn-secondary">Today</button>
-            <div className="flex items-center gap-1">
-              <button onClick={() => navigateMonth(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-              <span className="text-sm font-semibold text-gray-900 min-w-[160px] text-center">{MONTH_NAMES[month]} {year}</span>
-              <button onClick={() => navigateMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"><ChevronRight className="w-5 h-5" /></button>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {viewMode === 'calendar' && (
+            <>
+              <button onClick={goToToday} className="btn-sm btn-secondary">Today</button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => navigateMonth(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+                <span className="text-sm font-semibold text-gray-900 min-w-[160px] text-center">{MONTH_NAMES[month]} {year}</span>
+                <button onClick={() => navigateMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"><ChevronRight className="w-5 h-5" /></button>
+              </div>
+            </>
+          )}
+          {viewMode === 'list' && (
+            <>
+              {/* Date Range Filter */}
+              <input type="date" className="input text-sm w-auto" value={dateStart} onChange={(e) => { setDateStart(e.target.value); setCurrentPage(1); }} title="Start date" />
+              <span className="text-gray-400 text-xs">—</span>
+              <input type="date" className="input text-sm w-auto" value={dateEnd} onChange={(e) => { setDateEnd(e.target.value); setCurrentPage(1); }} title="End date" />
+              {/* Sort Controls */}
+              <div className="relative">
+                <select className="input text-sm" value={sortBy} onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}>
+                  <option value="dateTime">Date</option>
+                  <option value="status">Status</option>
+                  <option value="duration">Duration</option>
+                  <option value="createdAt">Created</option>
+                </select>
+              </div>
+              <button onClick={() => { setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc')); setCurrentPage(1); }} className="btn-sm btn-secondary" title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}>
+                {sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Calendar View */}
@@ -725,48 +771,86 @@ export default function AppointmentsPage() {
           ) : appointments.length === 0 ? (
             <div className="text-center py-12 text-gray-400"><Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" /><p>No appointments found</p></div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-left text-gray-500">
-                    <th className="px-5 py-3 font-medium">Patient</th>
-                    <th className="px-5 py-3 font-medium">Doctor</th>
-                    <th className="px-5 py-3 font-medium">Date & Time</th>
-                    <th className="px-5 py-3 font-medium">Duration</th>
-                    <th className="px-5 py-3 font-medium">Reason</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {appointments.map((appt) => (
-                    <tr key={appt.id} className="border-t border-gray-100 hover:bg-gray-50">
-                      <td className="px-5 py-3"><span className="font-medium text-gray-900">{appt.patient?.firstName} {appt.patient?.lastName}</span></td>
-                      <td className="px-5 py-3 text-gray-600">{appt.doctor?.user?.name}</td>
-                      <td className="px-5 py-3 text-gray-600 whitespace-nowrap"><div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-gray-400" /> {formatDate(appt.dateTime)} {formatTime(appt.dateTime)}</div></td>
-                      <td className="px-5 py-3 text-gray-600">{appt.duration} min</td>
-                      <td className="px-5 py-3 text-gray-500 max-w-[200px] truncate">{appt.reason || '-'}</td>
-                      <td className="px-5 py-3"><span className={`badge ${getStatusBadge(appt.status)}`}>{appt.status.replace('_', ' ')}</span></td>
-                      <td className="px-5 py-3">
-                        {canEdit && (
-                          <div className="flex flex-wrap gap-1">
-                            {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
-                              <button disabled={sendingReminder === appt.id} onClick={async () => { setSendingReminder(appt.id); try { const res = await reminderAPI.sendForAppointment(appt.id); toast.success(res.data.message || 'Reminder sent!'); } catch (err) { toast.error(err.response?.data?.error || 'Failed to send reminder'); } finally { setSendingReminder(null); } }} className="btn-sm btn-remind" title="Send WhatsApp reminder">{sendingReminder === appt.id ? 'Sending...' : 'Remind'}</button>
-                            )}
-                            {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
-                              <button onClick={() => openEditTab(appt)} className="btn-sm btn-secondary" title="Edit appointment"><Pencil className="w-3 h-3" /></button>
-                            )}
-                            {appt.status === 'SCHEDULED' && (<><button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm btn-secondary">Confirm</button><button onClick={() => handleStatusChange(appt.id, 'CANCELLED')} className="btn-sm btn-danger">Cancel</button></>)}
-                            {appt.status === 'CONFIRMED' && <button onClick={() => handleStatusChange(appt.id, 'IN_PROGRESS')} className="btn-sm btn-primary">Start</button>}
-                            {appt.status === 'IN_PROGRESS' && <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="btn-sm btn-primary">Complete</button>}
-                          </div>
-                        )}
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-gray-500">
+                      <th className="px-5 py-3 font-medium">Patient</th>
+                      <th className="px-5 py-3 font-medium">Doctor</th>
+                      <th className="px-5 py-3 font-medium">Date & Time</th>
+                      <th className="px-5 py-3 font-medium">Duration</th>
+                      <th className="px-5 py-3 font-medium">Reason</th>
+                      <th className="px-5 py-3 font-medium">Status</th>
+                      <th className="px-5 py-3 font-medium">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {appointments.map((appt) => (
+                      <tr key={appt.id} className="border-t border-gray-100 hover:bg-gray-50">
+                        <td className="px-5 py-3"><span className="font-medium text-gray-900">{appt.patient?.firstName} {appt.patient?.lastName}</span></td>
+                        <td className="px-5 py-3 text-gray-600">{appt.doctor?.user?.name}</td>
+                        <td className="px-5 py-3 text-gray-600 whitespace-nowrap"><div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-gray-400" /> {formatDate(appt.dateTime)} {formatTime(appt.dateTime)}</div></td>
+                        <td className="px-5 py-3 text-gray-600">{appt.duration} min</td>
+                        <td className="px-5 py-3 text-gray-500 max-w-[200px] truncate">{appt.reason || '-'}</td>
+                        <td className="px-5 py-3"><span className={`badge ${getStatusBadge(appt.status)}`}>{appt.status.replace('_', ' ')}</span></td>
+                        <td className="px-5 py-3">
+                          {canEdit && (
+                            <div className="flex flex-wrap gap-1">
+                              {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                                <button disabled={sendingReminder === appt.id} onClick={async () => { setSendingReminder(appt.id); try { const res = await reminderAPI.sendForAppointment(appt.id); toast.success(res.data.message || 'Reminder sent!'); } catch (err) { toast.error(err.response?.data?.error || 'Failed to send reminder'); } finally { setSendingReminder(null); } }} className="btn-sm btn-remind" title="Send WhatsApp reminder">{sendingReminder === appt.id ? 'Sending...' : 'Remind'}</button>
+                              )}
+                              {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                                <button onClick={() => openEditTab(appt)} className="btn-sm btn-secondary" title="Edit appointment"><Pencil className="w-3 h-3" /></button>
+                              )}
+                              {appt.status === 'SCHEDULED' && (<><button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm btn-secondary">Confirm</button><button onClick={() => handleStatusChange(appt.id, 'CANCELLED')} className="btn-sm btn-danger">Cancel</button></>)}
+                              {appt.status === 'CONFIRMED' && <button onClick={() => handleStatusChange(appt.id, 'IN_PROGRESS')} className="btn-sm btn-primary">Start</button>}
+                              {appt.status === 'IN_PROGRESS' && <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="btn-sm btn-primary">Complete</button>}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+                  <span className="text-xs text-gray-500">
+                    {((currentPage - 1) * 20) + 1}&ndash;{Math.min(currentPage * 20, totalCount)} of {totalCount}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    {(() => {
+                      const pages = [];
+                      for (let i = 1; i <= totalPages; i++) {
+                        if (i === 1 || i === totalPages || Math.abs(i - currentPage) <= 1) {
+                          pages.push(i);
+                        }
+                      }
+                      return pages.flatMap((p, idx, arr) => {
+                        const elements = [];
+                        if (idx > 0 && arr[idx - 1] !== p - 1) {
+                          elements.push(<span key={`e-${p}`} className="px-1 text-gray-400 text-xs">...</span>);
+                        }
+                        elements.push(
+                          <button key={p} onClick={() => setCurrentPage(p)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${p === currentPage ? 'bg-btn-primary text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                            {p}
+                          </button>
+                        );
+                        return elements;
+                      });
+                    })()}
+                    <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

@@ -28,12 +28,13 @@ describe('Appointment Controller', () => {
   };
 
   describe('getAll', () => {
-    it('should return all appointments for admin', async () => {
+    it('should return all appointments for admin with pagination metadata', async () => {
       mockReq = createMockReq({
         user: { id: 1, role: 'ADMIN' },
         query: {},
       });
       mockReq.prisma.appointment.findMany.mockResolvedValue([sampleAppointment]);
+      mockReq.prisma.appointment.count.mockResolvedValue(1);
 
       await appointmentController.getAll(mockReq, mockRes, mockNext);
 
@@ -44,9 +45,19 @@ describe('Appointment Controller', () => {
           patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
         },
         orderBy: { dateTime: 'asc' },
-        take: 200,
+        skip: 0,
+        take: 20,
       });
-      expect(mockRes.json).toHaveBeenCalledWith([sampleAppointment]);
+      expect(mockReq.prisma.appointment.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({}),
+      });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        data: [sampleAppointment],
+        total: 1,
+        page: 1,
+        limit: 20,
+        totalPages: 1,
+      });
     });
 
     it('should filter by status and date', async () => {
@@ -103,7 +114,7 @@ describe('Appointment Controller', () => {
       );
     });
 
-    it('should return empty array if doctor has no profile', async () => {
+    it('should return empty paginated response if doctor has no profile', async () => {
       mockReq = createMockReq({
         user: { id: 2, role: 'DOCTOR' },
         query: {},
@@ -112,7 +123,13 @@ describe('Appointment Controller', () => {
 
       await appointmentController.getAll(mockReq, mockRes, mockNext);
 
-      expect(mockRes.json).toHaveBeenCalledWith([]);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        data: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0,
+      });
     });
   });
 

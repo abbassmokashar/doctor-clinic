@@ -1,6 +1,6 @@
 exports.getAll = async (req, res, next) => {
   try {
-    const { status, doctorId, patientId, date, start, end } = req.query;
+    const { status, doctorId, patientId, date, start, end, page, limit, sortBy, sortOrder } = req.query;
     const where = {};
     if (status) where.status = status;
     if (doctorId) where.doctorId = parseInt(doctorId);
@@ -24,20 +24,42 @@ exports.getAll = async (req, res, next) => {
       if (doctor) {
         where.doctorId = doctor.id;
       } else {
-        return res.json([]);
+        return res.json({ data: [], total: 0, page: 1, limit: 20, totalPages: 0 });
       }
     }
 
-    const appointments = await req.prisma.appointment.findMany({
-      where,
-      include: {
-        doctor: { include: { user: { select: { name: true } } } },
-        patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
-      },
-      orderBy: { dateTime: 'asc' },
-      take: 200,
+    // Pagination defaults
+    const currentPage = Math.max(1, parseInt(page) || 1);
+    const currentLimit = Math.min(200, Math.max(1, parseInt(limit) || 20));
+    const skip = (currentPage - 1) * currentLimit;
+
+    // Sorting
+    const validSortFields = ['dateTime', 'status', 'duration', 'createdAt'];
+    const field = validSortFields.includes(sortBy) ? sortBy : 'dateTime';
+    const order = sortOrder === 'desc' ? 'desc' : 'asc';
+    const orderBy = { [field]: order };
+
+    const [appointments, total] = await Promise.all([
+      req.prisma.appointment.findMany({
+        where,
+        include: {
+          doctor: { include: { user: { select: { name: true } } } },
+          patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
+        },
+        orderBy,
+        skip,
+        take: currentLimit,
+      }),
+      req.prisma.appointment.count({ where }),
+    ]);
+
+    res.json({
+      data: appointments,
+      total,
+      page: currentPage,
+      limit: currentLimit,
+      totalPages: Math.ceil(total / currentLimit),
     });
-    res.json(appointments);
   } catch (error) {
     next(error);
   }

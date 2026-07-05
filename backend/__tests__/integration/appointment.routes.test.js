@@ -13,7 +13,7 @@ const mockPrismaClient = {
   user: { findUnique: jest.fn() },
   doctor: { findUnique: jest.fn() },
   patient: { findMany: jest.fn(), findUnique: jest.fn() },
-  appointment: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+  appointment: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), count: jest.fn() },
   $transaction: jest.fn((arg) => (typeof arg === 'function' ? arg(mockPrismaClient) : Promise.all(arg))),
   $disconnect: jest.fn(),
 };
@@ -93,19 +93,25 @@ describe('Appointment Routes - Integration', () => {
   // ─── GET /api/appointments ─────────────────────────────────────────────────
 
   describe('GET /api/appointments', () => {
-    it('should return all appointments for admin', async () => {
+    it('should return all appointments for admin with pagination', async () => {
       setupAuth(adminUser);
       mockPrismaClient.appointment.findMany.mockResolvedValue([sampleAppointment]);
+      mockPrismaClient.appointment.count.mockResolvedValue(1);
 
       const res = await request(app)
         .get('/api/appointments')
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0].doctor.user.name).toBe('Dr. Smith');
-      expect(res.body[0].patient.firstName).toBe('John');
+      expect(res.body).toHaveProperty('data');
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].doctor.user.name).toBe('Dr. Smith');
+      expect(res.body.data[0].patient.firstName).toBe('John');
+      expect(res.body).toHaveProperty('total', 1);
+      expect(res.body).toHaveProperty('page', 1);
+      expect(res.body).toHaveProperty('limit', 20);
+      expect(res.body).toHaveProperty('totalPages', 1);
     });
 
     it('should filter by status query param', async () => {
@@ -169,7 +175,7 @@ describe('Appointment Routes - Integration', () => {
       );
     });
 
-    it('should return empty array if doctor has no profile record', async () => {
+    it('should return empty paginated response if doctor has no profile record', async () => {
       setupAuth(doctorUser);
       mockPrismaClient.doctor.findUnique.mockResolvedValue(null);
 
@@ -178,7 +184,13 @@ describe('Appointment Routes - Integration', () => {
         .set('Authorization', `Bearer ${doctorToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual([]);
+      expect(res.body).toEqual({
+        data: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0,
+      });
     });
 
     it('should return 401 without authentication', async () => {

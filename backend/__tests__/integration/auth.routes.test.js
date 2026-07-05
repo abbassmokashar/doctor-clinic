@@ -198,13 +198,13 @@ describe('Auth Routes - Integration', () => {
     it('should login successfully and return 200 with user + token', async () => {
       const loginUser = {
         ...validUser,
-        password: bcrypt.hashSync('CorrectPass1!', 10),
+        password: bcrypt.hashSync('correct-pw-for-test', 10),
       };
       mockPrismaClient.user.findUnique.mockResolvedValue(loginUser);
 
       const res = await request(app)
         .post('/api/auth/login')
-        .send({ email: loginUser.email, password: 'CorrectPass1!' });
+        .send({ email: loginUser.email, password: 'correct-pw-for-test' });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('user');
@@ -223,7 +223,7 @@ describe('Auth Routes - Integration', () => {
 
       const res = await request(app)
         .post('/api/auth/login')
-        .send({ email: 'ghost@clinic.com', password: 'AnyPass1!' });
+        .send({ email: 'ghost@clinic.com', password: 'somepass123' });
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('message', 'Invalid email or password.');
@@ -237,7 +237,7 @@ describe('Auth Routes - Integration', () => {
 
       const res = await request(app)
         .post('/api/auth/login')
-        .send({ email: validUser.email, password: 'AnyPass1!' });
+        .send({ email: validUser.email, password: 'somepass123' });
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('message', 'Account is deactivated.');
@@ -246,13 +246,13 @@ describe('Auth Routes - Integration', () => {
     it('should return 401 for wrong password', async () => {
       const loginUser = {
         ...validUser,
-        password: bcrypt.hashSync('RealPass1!', 10),
+        password: bcrypt.hashSync('real-pw-for-test', 10),
       };
       mockPrismaClient.user.findUnique.mockResolvedValue(loginUser);
 
       const res = await request(app)
         .post('/api/auth/login')
-        .send({ email: loginUser.email, password: 'WrongPass1!' });
+        .send({ email: loginUser.email, password: 'wrong-pw-for-test' });
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('message', 'Invalid email or password.');
