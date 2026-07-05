@@ -19,6 +19,11 @@ import {
   Pencil,
   ArrowUp,
   ArrowDown,
+  CalendarRange,
+  SlidersHorizontal,
+  RotateCcw,
+  Zap,
+  Activity,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -85,6 +90,15 @@ export default function AppointmentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [pendingCloseId, setPendingCloseId] = useState(null);
   const [doctorApptsCache, setDoctorApptsCache] = useState({});
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const [walkInForm, setWalkInForm] = useState({ doctorId: '', patientId: '', reason: '' });
+  const [walkInSubmitting, setWalkInSubmitting] = useState(false);
+  const [walkInWarnings, setWalkInWarnings] = useState([]);
+  const [walkInConfirmOverlap, setWalkInConfirmOverlap] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [showQuickPatientForm, setShowQuickPatientForm] = useState(false);
+  const [quickPatientForm, setQuickPatientForm] = useState({ firstName: '', lastName: '', phone: '' });
+  const [quickPatientSubmitting, setQuickPatientSubmitting] = useState(false);
   const { isAdmin, isDoctor, isReceptionist } = useAuth();
   const canEdit = isAdmin || isDoctor || isReceptionist;
   const tabIdCounter = useRef(0);
@@ -299,7 +313,8 @@ export default function AppointmentsPage() {
     } else if (viewMode === 'calendar') {
       refreshCalendar();
     }
-  }, [currentMonth, filterStatus, viewMode, currentPage, sortBy, sortOrder, dateStart, dateEnd]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth, filterStatus, viewMode, currentPage, sortBy, sortOrder, dateStart, dateEnd, refreshKey]);
 
   const navigateMonth = (delta) => {
     setCurrentMonth(new Date(year, month + delta, 1));
@@ -600,62 +615,187 @@ export default function AppointmentsPage() {
         </div>
         <div className="flex items-center gap-3">
           {canEdit && (
-            <button onClick={() => openTab()} className="btn-primary">
-              <Plus className="w-4 h-4" />
-              New Appointment
-            </button>
+            <>
+              <button onClick={() => { setWalkInForm({ doctorId: '', patientId: '', reason: '' }); setWalkInWarnings([]); setWalkInConfirmOverlap(false); setShowQuickPatientForm(false); setQuickPatientForm({ firstName: '', lastName: '', phone: '' }); setShowWalkInModal(true); }} className="btn-walkin">
+                <Zap className="w-4 h-4" />
+                Walk-in
+              </button>
+              <button onClick={() => openTab()} className="btn-primary">
+                <Plus className="w-4 h-4" />
+                New Appointment
+              </button>
+            </>
           )}
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-            <button onClick={() => setViewMode('calendar')} className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'calendar' ? 'bg-btn-primary text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-              <Grid3X3 className="w-3.5 h-3.5 inline mr-1" /> Calendar
-            </button>
-            <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'list' ? 'bg-btn-primary text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-              <List className="w-3.5 h-3.5 inline mr-1" /> List
-            </button>
+      <div className="card px-4 py-3">
+        <div className="flex flex-wrap items-center gap-y-3 gap-x-4">
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)' }} role="tablist" aria-label="View mode">
+              <button type="button" role="tab" aria-selected={viewMode === 'calendar'} onClick={() => setViewMode('calendar')}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-all duration-150 ${viewMode === 'calendar'
+                  ? 'text-white shadow-sm' : 'hover:bg-black/5 text-gray-500'}`}
+                style={{
+                  backgroundColor: viewMode === 'calendar' ? 'var(--btn-primary-bg)' : 'transparent',
+                }}
+              >
+                <Grid3X3 className="w-3.5 h-3.5" /> Calendar
+              </button>
+              <button type="button" role="tab" aria-selected={viewMode === 'list'} onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-all duration-150 ${viewMode === 'list'
+                  ? 'text-white shadow-sm' : 'hover:bg-black/5 text-gray-500'}`}
+                style={{
+                  backgroundColor: viewMode === 'list' ? 'var(--btn-primary-bg)' : 'transparent',
+                }}
+              >
+                <List className="w-3.5 h-3.5" /> List
+              </button>
+            </div>
           </div>
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select className="input pl-10 pr-8 text-sm" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}>
-              <option value="">All Statuses</option>
-              {statuses.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-            </select>
+
+          {/* Divider */}
+          <div className="hidden sm:block w-px h-6" style={{ backgroundColor: 'var(--border)' }} />
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
+              <select
+                className="pl-8 pr-7 py-2 rounded-lg text-xs font-medium appearance-none cursor-pointer transition-all duration-150"
+                style={{
+                  backgroundColor: filterStatus ? 'var(--primary-50)' : 'var(--surface)',
+                  border: '1px solid ' + (filterStatus ? 'var(--primary-300)' : 'var(--border)'),
+                  color: filterStatus ? 'var(--primary-700)' : 'var(--text-secondary)',
+                }}
+                value={filterStatus}
+                onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="">All Statuses</option>
+                {statuses.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+              </select>
+              {filterStatus && (
+                <button type="button"
+                  onClick={() => { setFilterStatus(''); setCurrentPage(1); }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/10 transition-colors"
+                  aria-label="Clear status filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
+
+          {/* Calendar View Controls */}
           {viewMode === 'calendar' && (
             <>
-              <button onClick={goToToday} className="btn-sm btn-secondary">Today</button>
-              <div className="flex items-center gap-1">
-                <button onClick={() => navigateMonth(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-                <span className="text-sm font-semibold text-gray-900 min-w-[160px] text-center">{MONTH_NAMES[month]} {year}</span>
-                <button onClick={() => navigateMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"><ChevronRight className="w-5 h-5" /></button>
+              <div className="hidden sm:block w-px h-6" style={{ backgroundColor: 'var(--border)' }} />
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={goToToday} className="px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 hover:shadow-sm"
+                  style={{
+                    backgroundColor: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-label)',
+                  }}
+                >
+                  Today
+                </button>
+                <div className="flex items-center gap-0.5 rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  <button type="button" onClick={() => navigateMonth(-1)} className="p-1.5 transition-colors hover:bg-gray-100/50" style={{ color: 'var(--text-muted)' }} aria-label="Previous month">
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="px-3 py-1.5 text-sm font-semibold min-w-[150px] text-center select-none" style={{ color: 'var(--text-body)' }}>
+                    {MONTH_NAMES[month]} {year}
+                  </span>
+                  <button type="button" onClick={() => navigateMonth(1)} className="p-1.5 transition-colors hover:bg-gray-100/50" style={{ color: 'var(--text-muted)' }} aria-label="Next month">
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </>
           )}
+
+          {/* List View Controls */}
           {viewMode === 'list' && (
             <>
-              {/* Date Range Filter */}
-              <input type="date" className="input text-sm w-auto" value={dateStart} onChange={(e) => { setDateStart(e.target.value); setCurrentPage(1); }} title="Start date" />
-              <span className="text-gray-400 text-xs">—</span>
-              <input type="date" className="input text-sm w-auto" value={dateEnd} onChange={(e) => { setDateEnd(e.target.value); setCurrentPage(1); }} title="End date" />
+              <div className="hidden sm:block w-px h-6" style={{ backgroundColor: 'var(--border)' }} />
               {/* Sort Controls */}
-              <div className="relative">
-                <select className="input text-sm" value={sortBy} onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}>
-                  <option value="dateTime">Date</option>
-                  <option value="status">Status</option>
-                  <option value="duration">Duration</option>
-                  <option value="createdAt">Created</option>
-                </select>
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 px-2 py-2 rounded-lg" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--surface)' }}>
+                  <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
+                  <select
+                    className="text-xs bg-transparent border-none outline-none cursor-pointer font-medium py-0 px-1"
+                    style={{ color: 'var(--text-label)' }}
+                    value={sortBy}
+                    onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}
+                  >
+                    <option value="dateTime">Date</option>
+                    <option value="status">Status</option>
+                    <option value="duration">Duration</option>
+                    <option value="createdAt">Created</option>
+                  </select>
+                  <button type="button"
+                    onClick={() => { setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc')); setCurrentPage(1); }}
+                    className="p-0.5 rounded transition-colors hover:bg-gray-100/50"
+                    style={{ color: 'var(--text-muted)' }}
+                    title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                    aria-label={sortOrder === 'asc' ? 'Sort ascending' : 'Sort descending'}
+                  >
+                    {sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
-              <button onClick={() => { setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc')); setCurrentPage(1); }} className="btn-sm btn-secondary" title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}>
-                {sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
-              </button>
+
+              {/* Date Range */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--surface)' }}>
+                  <CalendarRange className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--text-muted)' }} />
+                  <input
+                    type="date"
+                    className="text-xs bg-transparent border-none outline-none w-[132px]"
+                    style={{ color: 'var(--text-body)' }}
+                    value={dateStart}
+                    onChange={(e) => { setDateStart(e.target.value); setCurrentPage(1); }}
+                    title="Start date"
+                    aria-label="Start date"
+                  />
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>—</span>
+                  <input
+                    type="date"
+                    className="text-xs bg-transparent border-none outline-none w-[132px]"
+                    style={{ color: 'var(--text-body)' }}
+                    value={dateEnd}
+                    onChange={(e) => { setDateEnd(e.target.value); setCurrentPage(1); }}
+                    title="End date"
+                    aria-label="End date"
+                  />
+                </div>
+              </div>
+
+              {/* Clear Filters */}
+              {(dateStart || dateEnd || filterStatus || sortBy !== 'dateTime' || sortOrder !== 'asc') && (
+                <button type="button"
+                  onClick={() => {
+                    setDateStart('');
+                    setDateEnd('');
+                    setFilterStatus('');
+                    setSortBy('dateTime');
+                    setSortOrder('asc');
+                    setCurrentPage(1);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-2 rounded-lg text-xs font-medium transition-all duration-150 hover:bg-gray-100/50 hover:border-solid"
+                  style={{
+                    color: 'var(--text-muted)',
+                    border: '1px dashed var(--border)',
+                  }}
+                  aria-label="Reset all filters"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Reset
+                </button>
+              )}
             </>
           )}
         </div>
@@ -712,7 +852,7 @@ export default function AppointmentsPage() {
                   </div>
                   <button onClick={() => setShowDayPanel(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
                 </div>
-                <div className="p-4">
+    <div className="p-4 space-y-4">
                   {loading ? (
                     <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-primary-600" /></div>
                   ) : dayAppointments.length === 0 ? (
@@ -724,37 +864,76 @@ export default function AppointmentsPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {dayAppointments.map((appt) => (
-                        <div key={appt.id} className={`rounded-lg border-l-4 ${STATUS_COLORS[appt.status]?.border || 'border-l-gray-500'} bg-white border border-gray-200 border-l-4 p-3 hover:shadow-sm transition-shadow`}>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-sm font-medium text-gray-900">{appt.patient?.firstName} {appt.patient?.lastName}</span>
-                            <span className={`badge text-[10px] ${getStatusBadge(appt.status)}`}>{appt.status.replace('_', ' ')}</span>
+                    <>
+                      {/* Waiting Room — walk-ins currently in progress */}
+                      {(() => {
+                        const walkIns = dayAppointments.filter((a) => a.type === 'WALK_IN' && a.status === 'IN_PROGRESS');
+                        if (walkIns.length === 0) return null;
+                        return (
+                          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--primary-200)', backgroundColor: 'var(--primary-50)' }}>
+                            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-primary-200">
+                              <Activity className="w-3.5 h-3.5 text-amber-500" />
+                              <span className="text-xs font-semibold text-gray-700">Waiting Room</span>
+                              <span className="text-[10px] font-medium text-gray-500 ml-auto">{walkIns.length} walk-in{walkIns.length > 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="divide-y divide-primary-200">
+                              {walkIns.map((appt) => (
+                                <div key={appt.id} className="px-3 py-2 flex items-center gap-2 hover:bg-white/50 transition-colors">
+                                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-medium text-gray-800">{appt.patient?.firstName} {appt.patient?.lastName}</span>
+                                      {appt.reason && <span className="text-[10px] text-gray-500 truncate">— {appt.reason}</span>}
+                                    </div>
+                                    <p className="text-[10px] text-gray-500">Dr. {appt.doctor?.user?.name} · {formatTime(appt.dateTime)}</p>
+                                  </div>
+                                  <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="text-[10px] px-2 py-1 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded font-medium whitespace-nowrap transition-colors">Complete</button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1"><Clock className="w-3 h-3" /> {formatTime(appt.dateTime)} ({appt.duration} min)</div>
-                          <p className="text-xs text-gray-500">Dr. {appt.doctor?.user?.name}</p>
-                          {appt.reason && <p className="text-xs text-gray-400 mt-1 truncate">{appt.reason}</p>}
-                          <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-gray-100">
-                            {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
-                              <button disabled={sendingReminder === appt.id} onClick={async (e) => { e.stopPropagation(); setSendingReminder(appt.id); try { const res = await reminderAPI.sendForAppointment(appt.id); toast.success(res.data.message || 'Reminder sent!'); } catch (err) { toast.error(err.response?.data?.error || 'Failed to send reminder'); } finally { setSendingReminder(null); } }} className="btn-sm text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded">
-                                <Send className="w-3 h-3" /> {sendingReminder === appt.id ? '...' : 'Remind'}
-                              </button>
-                            )}
-                            {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
-                              <button onClick={(e) => { e.stopPropagation(); openEditTab(appt); }} className="btn-sm text-[10px] px-2 py-1 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 rounded">
-                                <Pencil className="w-3 h-3" />
-                              </button>
-                            )}
-                            {appt.status === 'SCHEDULED' && (<><button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm text-[10px] px-2 py-1 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 rounded">Confirm</button><button onClick={() => handleStatusChange(appt.id, 'CANCELLED')} className="btn-sm text-[10px] px-2 py-1 bg-white text-red-600 border border-red-200 hover:bg-red-50 rounded">Cancel</button></>)}
-                            {appt.status === 'CONFIRMED' && <button onClick={() => handleStatusChange(appt.id, 'IN_PROGRESS')} className="btn-sm text-[10px] px-2 py-1 bg-primary-50 text-primary-700 hover:bg-primary-100 rounded">Start</button>}
-                            {appt.status === 'IN_PROGRESS' && <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="btn-sm text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded">Complete</button>}
+                        );
+                      })()}
+
+                      <div className="space-y-2">
+                        {dayAppointments.map((appt) => (
+                          <div key={appt.id} className={`rounded-lg border-l-4 ${STATUS_COLORS[appt.status]?.border || 'border-l-gray-500'} bg-white border border-gray-200 border-l-4 p-3 hover:shadow-sm transition-shadow`}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-sm font-medium text-gray-900 truncate">{appt.patient?.firstName} {appt.patient?.lastName}</span>
+                                {appt.type === 'WALK_IN' && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                                    <Zap className="w-2.5 h-2.5" /> Walk-in
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`badge text-[10px] ${getStatusBadge(appt.status)}`}>{appt.status.replace('_', ' ')}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1"><Clock className="w-3 h-3" /> {formatTime(appt.dateTime)} ({appt.duration} min)</div>
+                            <p className="text-xs text-gray-500">Dr. {appt.doctor?.user?.name}</p>
+                            {appt.reason && <p className="text-xs text-gray-400 mt-1 truncate">{appt.reason}</p>}
+                            <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-gray-100">
+                              {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                                <button disabled={sendingReminder === appt.id} onClick={async (e) => { e.stopPropagation(); setSendingReminder(appt.id); try { const res = await reminderAPI.sendForAppointment(appt.id); toast.success(res.data.message || 'Reminder sent!'); } catch (err) { toast.error(err.response?.data?.error || 'Failed to send reminder'); } finally { setSendingReminder(null); } }} className="btn-sm text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded">
+                                  <Send className="w-3 h-3" /> {sendingReminder === appt.id ? '...' : 'Remind'}
+                                </button>
+                              )}
+                              {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                                <button onClick={(e) => { e.stopPropagation(); openEditTab(appt); }} className="btn-sm text-[10px] px-2 py-1 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 rounded">
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              )}
+                              {appt.status === 'SCHEDULED' && (<><button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm text-[10px] px-2 py-1 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 rounded">Confirm</button><button onClick={() => handleStatusChange(appt.id, 'CANCELLED')} className="btn-sm text-[10px] px-2 py-1 bg-white text-red-600 border border-red-200 hover:bg-red-50 rounded">Cancel</button></>)}
+                              {appt.status === 'CONFIRMED' && <button onClick={() => handleStatusChange(appt.id, 'IN_PROGRESS')} className="btn-sm text-[10px] px-2 py-1 bg-primary-50 text-primary-700 hover:bg-primary-100 rounded">Start</button>}
+                              {appt.status === 'IN_PROGRESS' && appt.type !== 'WALK_IN' && <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="btn-sm text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded">Complete</button>}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                      {canEdit && (
-                        <button onClick={() => openTab()} className="btn-sm btn-secondary w-full mt-2"><Plus className="w-3 h-3" /> Add Appointment</button>
-                      )}
-                    </div>
+                        ))}
+                        {canEdit && (
+                          <button onClick={() => openTab()} className="btn-sm btn-secondary w-full mt-2"><Plus className="w-3 h-3" /> Add Appointment</button>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -786,31 +965,43 @@ export default function AppointmentsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {appointments.map((appt) => (
-                      <tr key={appt.id} className="border-t border-gray-100 hover:bg-gray-50">
-                        <td className="px-5 py-3"><span className="font-medium text-gray-900">{appt.patient?.firstName} {appt.patient?.lastName}</span></td>
-                        <td className="px-5 py-3 text-gray-600">{appt.doctor?.user?.name}</td>
-                        <td className="px-5 py-3 text-gray-600 whitespace-nowrap"><div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-gray-400" /> {formatDate(appt.dateTime)} {formatTime(appt.dateTime)}</div></td>
-                        <td className="px-5 py-3 text-gray-600">{appt.duration} min</td>
-                        <td className="px-5 py-3 text-gray-500 max-w-[200px] truncate">{appt.reason || '-'}</td>
-                        <td className="px-5 py-3"><span className={`badge ${getStatusBadge(appt.status)}`}>{appt.status.replace('_', ' ')}</span></td>
-                        <td className="px-5 py-3">
-                          {canEdit && (
-                            <div className="flex flex-wrap gap-1">
-                              {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
-                                <button disabled={sendingReminder === appt.id} onClick={async () => { setSendingReminder(appt.id); try { const res = await reminderAPI.sendForAppointment(appt.id); toast.success(res.data.message || 'Reminder sent!'); } catch (err) { toast.error(err.response?.data?.error || 'Failed to send reminder'); } finally { setSendingReminder(null); } }} className="btn-sm btn-remind" title="Send WhatsApp reminder">{sendingReminder === appt.id ? 'Sending...' : 'Remind'}</button>
+                    {appointments.map((appt) => {
+                      const isWalkIn = appt.type === 'WALK_IN';
+                      return (
+                        <tr key={appt.id} className={`border-t border-gray-100 hover:bg-gray-50 ${isWalkIn ? 'bg-amber-50/40' : ''}`}>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-gray-900">{appt.patient?.firstName} {appt.patient?.lastName}</span>
+                              {isWalkIn && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                                  <Zap className="w-2.5 h-2.5" /> Walk-in
+                                </span>
                               )}
-                              {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
-                                <button onClick={() => openEditTab(appt)} className="btn-sm btn-secondary" title="Edit appointment"><Pencil className="w-3 h-3" /></button>
-                              )}
-                              {appt.status === 'SCHEDULED' && (<><button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm btn-secondary">Confirm</button><button onClick={() => handleStatusChange(appt.id, 'CANCELLED')} className="btn-sm btn-danger">Cancel</button></>)}
-                              {appt.status === 'CONFIRMED' && <button onClick={() => handleStatusChange(appt.id, 'IN_PROGRESS')} className="btn-sm btn-primary">Start</button>}
-                              {appt.status === 'IN_PROGRESS' && <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="btn-sm btn-primary">Complete</button>}
                             </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-5 py-3 text-gray-600">{appt.doctor?.user?.name}</td>
+                          <td className="px-5 py-3 text-gray-600 whitespace-nowrap"><div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-gray-400" /> {formatDate(appt.dateTime)} {formatTime(appt.dateTime)}</div></td>
+                          <td className="px-5 py-3 text-gray-600">{appt.duration} min</td>
+                          <td className="px-5 py-3 text-gray-500 max-w-[200px] truncate">{appt.reason || '-'}</td>
+                          <td className="px-5 py-3"><span className={`badge ${getStatusBadge(appt.status)}`}>{appt.status.replace('_', ' ')}</span></td>
+                          <td className="px-5 py-3">
+                            {canEdit && (
+                              <div className="flex flex-wrap gap-1">
+                                {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                                  <button disabled={sendingReminder === appt.id} onClick={async () => { setSendingReminder(appt.id); try { const res = await reminderAPI.sendForAppointment(appt.id); toast.success(res.data.message || 'Reminder sent!'); } catch (err) { toast.error(err.response?.data?.error || 'Failed to send reminder'); } finally { setSendingReminder(null); } }} className="btn-sm btn-remind" title="Send WhatsApp reminder">{sendingReminder === appt.id ? 'Sending...' : 'Remind'}</button>
+                                )}
+                                {(appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') && (
+                                  <button onClick={() => openEditTab(appt)} className="btn-sm btn-secondary" title="Edit appointment"><Pencil className="w-3 h-3" /></button>
+                                )}
+                                {appt.status === 'SCHEDULED' && (<><button onClick={() => handleStatusChange(appt.id, 'CONFIRMED')} className="btn-sm btn-secondary">Confirm</button><button onClick={() => handleStatusChange(appt.id, 'CANCELLED')} className="btn-sm btn-danger">Cancel</button></>)}
+                                {appt.status === 'CONFIRMED' && <button onClick={() => handleStatusChange(appt.id, 'IN_PROGRESS')} className="btn-sm btn-primary">Start</button>}
+                                {appt.status === 'IN_PROGRESS' && !isWalkIn && <button onClick={() => handleStatusChange(appt.id, 'COMPLETED')} className="btn-sm btn-primary">Complete</button>}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -852,6 +1043,191 @@ export default function AppointmentsPage() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Walk-in Modal */}
+      {showWalkInModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowWalkInModal(false)} />
+          <div className="relative w-full max-w-lg mx-4 card p-6 shadow-xl" style={{ backgroundColor: 'var(--surface)' }}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold" style={{ color: 'var(--text-body)' }}>Walk-in Appointment</h3>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Check in an urgent patient immediately</p>
+                </div>
+              </div>
+              <button onClick={() => setShowWalkInModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100" style={{ color: 'var(--text-muted)' }}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="label">Doctor *</label>
+                <select className="input" value={walkInForm.doctorId} onChange={(e) => { setWalkInForm({ ...walkInForm, doctorId: e.target.value }); setWalkInWarnings([]); setWalkInConfirmOverlap(false); }} required>
+                  <option value="">Select doctor...</option>
+                  {doctors.map((d) => <option key={d.id} value={d.id}>{d.user?.name} - {d.specialization}{d.consultationFee ? ` ($${d.consultationFee})` : ''}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label mb-0">Patient *</label>
+                  {!showQuickPatientForm && (
+                    <button type="button" onClick={() => setShowQuickPatientForm(true)} className="text-xs font-medium flex items-center gap-1 px-2 py-1 rounded transition-colors hover:bg-gray-100" style={{ color: 'var(--primary-600)' }}>
+                      <Plus className="w-3 h-3" /> New Patient
+                    </button>
+                  )}
+                </div>
+
+                {showQuickPatientForm ? (
+                  <div className="space-y-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--gray-50)', border: '1px solid var(--border)' }}>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label text-xs">First Name *</label>
+                        <input type="text" className="input text-sm" value={quickPatientForm.firstName}
+                          onChange={(e) => setQuickPatientForm({ ...quickPatientForm, firstName: e.target.value })}
+                          placeholder="First name" />
+                      </div>
+                      <div>
+                        <label className="label text-xs">Last Name *</label>
+                        <input type="text" className="input text-sm" value={quickPatientForm.lastName}
+                          onChange={(e) => setQuickPatientForm({ ...quickPatientForm, lastName: e.target.value })}
+                          placeholder="Last name" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label text-xs">Phone *</label>
+                      <input type="text" className="input text-sm" value={quickPatientForm.phone}
+                        onChange={(e) => setQuickPatientForm({ ...quickPatientForm, phone: e.target.value })}
+                        placeholder="Phone number" />
+                    </div>
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button type="button" onClick={() => { setShowQuickPatientForm(false); setQuickPatientForm({ firstName: '', lastName: '', phone: '' }); }}
+                        className="btn-sm btn-secondary text-xs">Cancel</button>
+                      <button type="button" disabled={!quickPatientForm.firstName || !quickPatientForm.lastName || !quickPatientForm.phone || quickPatientSubmitting}
+                        onClick={async () => {
+                          if (!quickPatientForm.firstName || !quickPatientForm.lastName || !quickPatientForm.phone) return;
+                          setQuickPatientSubmitting(true);
+                          try {
+                            const res = await patientAPI.create(quickPatientForm);
+                            const newPatient = res.data;
+                            // Refresh patients list and select the new one
+                            const patientsRes = await patientAPI.getAll({});
+                            setPatients(patientsRes.data);
+                            setWalkInForm((prev) => ({ ...prev, patientId: String(newPatient.id) }));
+                            setWalkInWarnings([]);
+                            setWalkInConfirmOverlap(false);
+                            setShowQuickPatientForm(false);
+                            setQuickPatientForm({ firstName: '', lastName: '', phone: '' });
+                            toast.success('Patient created and selected');
+                          } catch (error) {
+                            toast.error(error.response?.data?.message || 'Failed to create patient');
+                          } finally {
+                            setQuickPatientSubmitting(false);
+                          }
+                        }}
+                        className="btn-sm text-xs" style={{ backgroundColor: 'var(--btn-primary-bg)', color: 'white' }}
+                      >
+                        {quickPatientSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                        {quickPatientSubmitting ? 'Saving...' : 'Save & Select'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <select className="input" value={walkInForm.patientId} onChange={(e) => { setWalkInForm({ ...walkInForm, patientId: e.target.value }); setWalkInWarnings([]); setWalkInConfirmOverlap(false); }} required>
+                    <option value="">Select patient...</option>
+                    {patients.map((p) => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} - {p.phone}</option>)}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="label">Reason / Symptoms</label>
+                <textarea className="input" rows={2} value={walkInForm.reason} onChange={(e) => setWalkInForm({ ...walkInForm, reason: e.target.value })} placeholder="e.g. chest pain, high fever, injury..." />
+              </div>
+
+              {/* Auto-info card */}
+              <div className="rounded-lg p-3 text-xs space-y-1" style={{ backgroundColor: 'var(--gray-50)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-1.5 font-medium" style={{ color: 'var(--text-label)' }}>
+                  <Clock className="w-3.5 h-3.5" />
+                  Will be created for <strong>right now</strong>
+                </div>
+                <p style={{ color: 'var(--text-muted)' }}>Status will be set to <strong>In Progress</strong></p>
+                {doctors.find((d) => d.id === parseInt(walkInForm.doctorId))?.consultationFee && (
+                  <p style={{ color: 'var(--text-muted)' }}>
+                    Invoice will be auto-created for <strong>${doctors.find((d) => d.id === parseInt(walkInForm.doctorId)).consultationFee}</strong>
+                  </p>
+                )}
+              </div>
+
+              {/* Warnings */}
+              {walkInWarnings.length > 0 && (
+                <div className="rounded-lg p-3 bg-amber-50 border border-amber-200 text-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span className="font-medium text-amber-700">Schedule conflict detected</span>
+                  </div>
+                  <ul className="text-xs text-amber-600 space-y-1">
+                    {walkInWarnings.map((w, i) => <li key={i}>• {w.message}</li>)}
+                  </ul>
+                  {!walkInConfirmOverlap && (
+                    <button onClick={() => setWalkInConfirmOverlap(true)} className="mt-2 text-xs font-medium text-amber-700 underline hover:no-underline">
+                      Proceed anyway
+                    </button>
+                  )}
+                  {walkInConfirmOverlap && (
+                    <p className="mt-1 text-xs font-medium text-amber-700">✓ You confirmed — will create despite the conflict</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+              <button onClick={() => setShowWalkInModal(false)} className="btn-secondary text-sm">Cancel</button>
+              <button
+                disabled={!walkInForm.doctorId || !walkInForm.patientId || walkInSubmitting}
+                onClick={async () => {
+                  if (!walkInForm.doctorId || !walkInForm.patientId) return;
+                  setWalkInSubmitting(true);
+                  try {
+                    const res = await appointmentAPI.createWalkIn({
+                      doctorId: walkInForm.doctorId,
+                      patientId: walkInForm.patientId,
+                      reason: walkInForm.reason || 'Walk-in',
+                      confirmOverlap: walkInConfirmOverlap,
+                    });
+                    const { warnings } = res.data;
+                    // If there are warnings and user hasn't confirmed, show warnings (appointment wasn't created)
+                    if (warnings && warnings.length > 0 && !walkInConfirmOverlap) {
+                      setWalkInWarnings(warnings);
+                      setWalkInSubmitting(false);
+                      return;
+                    }
+                    setShowWalkInModal(false);
+                    const msgParts = ['Walk-in checked in successfully'];
+                    if (res.data.invoice) {
+                      msgParts.push(`Invoice created for $${res.data.invoice.amount.toFixed(2)}`);
+                    }
+                    toast.success(msgParts.join(' — '));
+                    refreshCalendar();
+                    setRefreshKey((k) => k + 1);
+                  } catch (error) {
+                    toast.error(error.response?.data?.message || 'Failed to create walk-in');
+                  } finally {
+                    setWalkInSubmitting(false);
+                  }
+                }}
+                className="btn-walkin text-sm"
+              >
+                {walkInSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                {walkInSubmitting ? 'Checking in...' : 'Check-in Walk-in'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

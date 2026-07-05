@@ -84,6 +84,7 @@ model Appointment {
   patientId  Int
   dateTime   DateTime
   duration   Int      @default(30)
+  type       String   @default("SCHEDULED")
   status     String   @default("SCHEDULED")
   reason     String?
   notes      String?

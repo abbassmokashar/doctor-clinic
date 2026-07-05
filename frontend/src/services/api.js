@@ -62,6 +62,7 @@ export const appointmentAPI = {
   create: (data) => api.post('/appointments', data),
   update: (id, data) => api.put(`/appointments/${id}`, data),
   delete: (id) => api.delete(`/appointments/${id}`),
+  createWalkIn: (data) => api.post('/appointments/walk-in', data),
 };
 
 // Schedules

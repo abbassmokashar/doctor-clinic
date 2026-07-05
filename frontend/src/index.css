@@ -128,6 +128,17 @@
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
   }
+  .btn-walkin {
+    @apply btn;
+    background-color: #f59e0b;
+    color: white;
+  }
+  .btn-walkin:hover:not(:disabled) {
+    background-color: #d97706;
+  }
+  .btn-walkin:focus {
+    --tw-ring-color: #f59e0b;
+  }
   .btn-sm {
     @apply btn px-3 py-1.5 text-xs;
   }

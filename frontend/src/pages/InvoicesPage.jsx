@@ -16,6 +16,7 @@ import {
   CreditCard,
   Printer,
   MessageCircle,
+  RotateCcw,
 } from 'lucide-react';
 import InvoicePrint from '../components/InvoicePrint';
 import toast from 'react-hot-toast';
@@ -269,13 +270,59 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="relative max-w-xs">
-        <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <select className="input pl-10" value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="">All Statuses</option>
-          {invoiceStatuses.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-        </select>
+      {/* Filter Toolbar */}
+      <div className="card px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
+              <select
+                className="pl-8 pr-7 py-2 rounded-lg text-xs font-medium appearance-none cursor-pointer transition-all duration-150"
+                style={{
+                  backgroundColor: filter ? 'var(--primary-50)' : 'var(--surface)',
+                  border: '1px solid ' + (filter ? 'var(--primary-300)' : 'var(--border)'),
+                  color: filter ? 'var(--primary-700)' : 'var(--text-secondary)',
+                }}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              >
+                <option value="">All Statuses</option>
+                {invoiceStatuses.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+              </select>
+              {filter && (
+                <button
+                  type="button"
+                  onClick={() => setFilter('')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-black/10 transition-colors"
+                  aria-label="Clear status filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="hidden sm:block w-px h-6" style={{ backgroundColor: 'var(--border)' }} />
+          <div className="flex items-center gap-2">
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
+            </span>
+            {filter && (
+              <button
+                type="button"
+                onClick={() => setFilter('')}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 hover:bg-gray-100/50"
+                style={{
+                  color: 'var(--text-muted)',
+                  border: '1px dashed var(--border)',
+                }}
+                aria-label="Reset filter"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {loading ? (
