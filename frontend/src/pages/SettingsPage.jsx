@@ -52,7 +52,7 @@ const ALL_TABS = [
   { id: 'general', label: 'General', icon: Settings, adminOnly: false },
   { id: 'appearance', label: 'Appearance', icon: Palette, adminOnly: true },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, adminOnly: true },
-  { id: 'reminders', label: 'Reminders', icon: Bell, adminOnly: true },
+  { id: 'reminders', label: 'Reminders', icon: Bell, adminOnly: false },
   { id: 'accounts', label: 'Accounts', icon: Users, adminOnly: true },
   { id: 'backup', label: 'Backup', icon: Database, adminOnly: false },
 ];

@@ -1,10 +1,19 @@
 const bcrypt = require('bcryptjs');
 
+const REMINDER_KEYS = [
+  'reminderEnabled', 'reminderLanguage', 'reminderDaysBefore',
+  'reminderMessageEn', 'reminderMessageAr',
+];
+
 exports.getAll = async (req, res, next) => {
   try {
     const settings = await req.prisma.setting.findMany();
     const map = {};
-    settings.forEach((s) => { map[s.key] = s.value; });
+    for (const s of settings) {
+      // Hide reminder settings from non-SUPERADMIN users
+      if (req.user.role !== 'SUPERADMIN' && REMINDER_KEYS.includes(s.key)) continue;
+      map[s.key] = s.value;
+    }
     res.json(map);
   } catch (error) {
     next(error);
@@ -18,8 +27,7 @@ exports.update = async (req, res, next) => {
       'appName', 'appSubtitle', 'colorTheme', 'logoUrl', 'logoStyle', 'faviconUrl',
       'clinicSubtitle', 'invoiceClinicAddress', 'invoiceClinicPhone',
       'invoiceClinicEmail', 'invoiceTaxId', 'invoiceFooter',
-      'reminderEnabled', 'reminderLanguage', 'reminderDaysBefore',
-      'reminderMessageEn', 'reminderMessageAr',
+      ...REMINDER_KEYS,
     ];
 
     for (const key of Object.keys(updates)) {
