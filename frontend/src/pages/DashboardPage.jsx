@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { dashboardAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { Link } from 'react-router-dom';
 import {
   Stethoscope,
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const { isAdmin, isDoctor, isReceptionist } = useAuth();
+  const { appName, appSubtitle } = useTheme();
   const canManageDoctors = isAdmin || isReceptionist;
 
   useEffect(() => {
@@ -91,7 +93,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 mt-1">Welcome to Doctor Clinic Management System</p>
+          <p className="text-gray-500 mt-1">Welcome to {appName || 'Doctor Clinic'}{appSubtitle ? ` ${appSubtitle}` : ''}</p>
         </div>
       </div>
 

@@ -10,6 +10,9 @@ export function ThemeProvider({ children }) {
   const [appName, setAppNameState] = useState(() => {
     return localStorage.getItem('appName') || 'Doctor Clinic';
   });
+  const [appSubtitle, setAppSubtitleState] = useState(() => {
+    return localStorage.getItem('appSubtitle') || '';
+  });
   const [logoUrl, setLogoUrlState] = useState(() => {
     return localStorage.getItem('logoUrl') || '';
   });
@@ -48,6 +51,12 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     if (appName) localStorage.setItem('appName', appName);
   }, [appName]);
+
+  // Persist app subtitle
+  useEffect(() => {
+    if (appSubtitle) localStorage.setItem('appSubtitle', appSubtitle);
+    else localStorage.removeItem('appSubtitle');
+  }, [appSubtitle]);
 
   // Persist logo settings
   useEffect(() => {
@@ -92,8 +101,9 @@ export function ThemeProvider({ children }) {
 
   // Update document title with app name
   useEffect(() => {
-    document.title = appName ? `${appName} Management System` : 'Doctor Clinic Management System';
-  }, [appName]);
+    const sub = appSubtitle ? ` ${appSubtitle}` : '';
+    document.title = appName ? `${appName}${sub}` : `Doctor Clinic${sub}`;
+  }, [appName, appSubtitle]);
 
   const setTheme = useCallback(async (newTheme) => {
     setThemeState(newTheme);
@@ -107,6 +117,11 @@ export function ThemeProvider({ children }) {
   const toggleTheme = useCallback(() => {
     setTheme(theme === 'light' ? 'dark' : 'light');
   }, [theme, setTheme]);
+
+  const setAppSubtitle = useCallback(async (val) => {
+    setAppSubtitleState(val);
+    try { await settingsAPI.update({ appSubtitle: val }); } catch {}
+  }, []);
 
   const setAppName = useCallback(async (newName) => {
     setAppNameState(newName);
@@ -180,6 +195,9 @@ export function ThemeProvider({ children }) {
         if (data.appName) {
           setAppNameState(data.appName);
         }
+        if (data.appSubtitle !== undefined && data.appSubtitle !== null) {
+          setAppSubtitleState(data.appSubtitle);
+        }
         if (data.logoUrl) {
           setLogoUrlState(data.logoUrl);
         }
@@ -217,6 +235,7 @@ export function ThemeProvider({ children }) {
     <ThemeContext.Provider value={{
       theme, setTheme, toggleTheme, isDark,
       appName, setAppName,
+      appSubtitle, setAppSubtitle,
       logoUrl, setLogoUrl,
       logoStyle, setLogoStyle,
       faviconUrl, setFaviconUrl,

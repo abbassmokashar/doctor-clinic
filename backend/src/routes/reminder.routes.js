@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { runOnce, sendSingleReminder } = require('../services/reminder.service');
+const { runOnce, sendSingleReminder, getReminderSettings, DEFAULT_TEMPLATE_EN, DEFAULT_TEMPLATE_AR } = require('../services/reminder.service');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 /**
@@ -55,6 +55,31 @@ router.post('/send/:appointmentId', authenticate, authorize('ADMIN', 'DOCTOR', '
       console.error(`[API] Reminder failed for appointment #${appointmentId}:`, result);
       res.status(400).json(result);
     }
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/reminders/settings
+ *
+ * Get current reminder settings including templates.
+ * Only accessible to SUPERADMIN.
+ */
+router.get('/settings', authenticate, authorize('SUPERADMIN'), async (req, res, next) => {
+  try {
+    const settings = await getReminderSettings(req.prisma);
+    res.json({
+      enabled: settings.enabled,
+      language: settings.language,
+      daysBefore: settings.daysBefore,
+      templateEn: settings.templateEn,
+      templateAr: settings.templateAr,
+      defaults: {
+        templateEn: DEFAULT_TEMPLATE_EN,
+        templateAr: DEFAULT_TEMPLATE_AR,
+      },
+    });
   } catch (error) {
     next(error);
   }

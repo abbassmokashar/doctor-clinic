@@ -15,9 +15,11 @@ exports.update = async (req, res, next) => {
   try {
     const updates = req.body; // { appName: "...", colorTheme: "...", logoUrl: "...", logoStyle: "..." }
     const allowedKeys = [
-      'appName', 'colorTheme', 'logoUrl', 'logoStyle', 'faviconUrl',
+      'appName', 'appSubtitle', 'colorTheme', 'logoUrl', 'logoStyle', 'faviconUrl',
       'clinicSubtitle', 'invoiceClinicAddress', 'invoiceClinicPhone',
       'invoiceClinicEmail', 'invoiceTaxId', 'invoiceFooter',
+      'reminderEnabled', 'reminderLanguage', 'reminderDaysBefore',
+      'reminderMessageEn', 'reminderMessageAr',
     ];
 
     for (const key of Object.keys(updates)) {

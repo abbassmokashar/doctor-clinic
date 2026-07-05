@@ -88,9 +88,21 @@ function buildInvoiceHtml(invoice, settings = {}) {
     invoiceClinicEmail = '',
     invoiceTaxId = '',
     invoiceFooter = '',
-    logoUrl = '',
+    logoUrl: rawLogoUrl = '',
     logoStyle = '',
   } = settings;
+
+  // Resolve relative logo URL to an absolute file:/// path so Chrome headless
+  // (which opens the HTML from a local temp file) can load the image from disk.
+  // The stored logoUrl is a web-relative path like '/uploads/logo/logo-xxx.png'
+  // which works in the browser but not when rendering from file:///.
+  let logoUrl = rawLogoUrl;
+  if (logoUrl && logoUrl.startsWith('/')) {
+    const absolutePath = path.resolve(__dirname, '../..', logoUrl.slice(1));
+    if (fs.existsSync(absolutePath)) {
+      logoUrl = `file:///${absolutePath.replace(/\\/g, '/')}`;
+    }
+  }
 
   const patient = invoice.patient || {};
   const installments = invoice.installments || [];

@@ -36,7 +36,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const { user, logout } = useAuth();
-  const { appName, logoUrl, logoStyle } = useTheme();
+  const { appName, appSubtitle, logoUrl, logoStyle } = useTheme();
   const navigate = useNavigate();
 
   const navItems = useMemo(() => {
@@ -83,7 +83,7 @@ export default function Layout() {
             )}
             <div>
               <h1 className="text-lg font-bold text-gray-900">{appName}</h1>
-              <p className="text-xs text-gray-500">Management System</p>
+              <p className="text-xs text-gray-500">{appSubtitle}</p>
             </div>
           </div>
 

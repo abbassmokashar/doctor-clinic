@@ -141,6 +141,7 @@ export const medicalTestAPI = {
 export const reminderAPI = {
   trigger: (params) => api.post('/reminders/trigger', null, { params }),
   sendForAppointment: (appointmentId) => api.post(`/reminders/send/${appointmentId}`),
+  getSettings: () => api.get('/reminders/settings'),
 };
 
 // Dashboard

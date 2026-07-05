@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
-import { settingsAPI, backupAPI, whatsappAPI } from '../services/api';
+import { settingsAPI, backupAPI, whatsappAPI, reminderAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Settings,
@@ -31,6 +31,9 @@ import {
   Image,
   Trash2,
   Stethoscope,
+  Bell,
+  Globe,
+  RotateCcw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -48,6 +51,7 @@ const ALL_TABS = [
   { id: 'general', label: 'General', icon: Settings, adminOnly: false },
   { id: 'appearance', label: 'Appearance', icon: Palette, adminOnly: true },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, adminOnly: true },
+  { id: 'reminders', label: 'Reminders', icon: Bell, adminOnly: true },
   { id: 'accounts', label: 'Accounts', icon: Users, adminOnly: true },
   { id: 'backup', label: 'Backup', icon: Database, adminOnly: false },
 ];
@@ -113,6 +117,7 @@ export default function SettingsPage() {
         {activeTab === 'general' && <GeneralTab />}
         {activeTab === 'appearance' && <AppearanceTab />}
         {activeTab === 'whatsapp' && <WhatsAppTab />}
+        {activeTab === 'reminders' && <RemindersTab />}
         {activeTab === 'accounts' && <AccountsTab />}
         {activeTab === 'backup' && <BackupTab />}
       </div>
@@ -123,6 +128,7 @@ export default function SettingsPage() {
 function GeneralTab() {
   const {
     appName, setAppName,
+    appSubtitle, setAppSubtitle,
     logoUrl, setLogoUrl, logoStyle, setLogoStyle,
     faviconUrl, setFaviconUrl,
     clinicSubtitle, setClinicSubtitle,
@@ -133,13 +139,16 @@ function GeneralTab() {
     invoiceFooter, setInvoiceFooter,
   } = useTheme();
   const [name, setName] = useState(appName);
+  const [subtitle, setSubtitle] = useState(appSubtitle);
   const [saving, setSaving] = useState(false);
+  const [savingSubtitle, setSavingSubtitle] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingFavicon, setUploadingFavicon] = useState(false);
   const fileInputRef = useRef(null);
   const faviconInputRef = useRef(null);
 
   useEffect(() => { setName(appName); }, [appName]);
+  useEffect(() => { setSubtitle(appSubtitle); }, [appSubtitle]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -250,6 +259,36 @@ function GeneralTab() {
         </p>
       </div>
 
+      {/* App Subtitle */}
+      <div className="card p-5">
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>App Subtitle</h2>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          This subtitle appears under the clinic name in the sidebar. Change it to anything you like — e.g., “Medical Center”, “Dental Clinic”, or leave it empty.
+        </p>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            className="input flex-1"
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.target.value)}
+            placeholder="Management System"
+          />
+          <button
+            onClick={async () => {
+              setSavingSubtitle(true);
+              await setAppSubtitle(subtitle);
+              setSavingSubtitle(false);
+              toast.success('Subtitle updated');
+            }}
+            disabled={savingSubtitle}
+            className="btn-primary"
+          >
+            {savingSubtitle ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save
+          </button>
+        </div>
+      </div>
+
       {/* Logo Settings */}
       <div className="card p-5">
         <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Logo</h2>
@@ -314,7 +353,7 @@ function GeneralTab() {
               </div>
               <div>
                 <p className="text-sm font-medium" style={{ color: 'var(--text-body)' }}>{appName}</p>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Management System</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{appSubtitle}</p>
               </div>
               {!logoUrl && (
                 <span className="text-xs text-primary-600 font-medium flex items-center gap-1">
@@ -532,7 +571,7 @@ function GeneralTab() {
             )}
             <div>
               <p className="text-sm font-bold" style={{ color: 'var(--text-body)' }}>{appName}</p>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Management System</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{appSubtitle}</p>
             </div>
           </div>
         </div>
@@ -1300,6 +1339,276 @@ function WhatsAppTab() {
             </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function RemindersTab() {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    enabled: true,
+    language: 'en',
+    daysBefore: 1,
+    templateEn: '',
+    templateAr: '',
+  });
+  const [defaults, setDefaults] = useState({ templateEn: '', templateAr: '' });
+
+  const fetchSettings = () => {
+    setLoading(true);
+    reminderAPI.getSettings()
+      .then((res) => {
+        const data = res.data;
+        setForm({
+          enabled: data.enabled,
+          language: data.language || 'en',
+          daysBefore: data.daysBefore || 1,
+          templateEn: data.templateEn,
+          templateAr: data.templateAr,
+        });
+        setDefaults(data.defaults || { templateEn: '', templateAr: '' });
+      })
+      .catch(() => toast.error('Failed to load reminder settings'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchSettings(); }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await settingsAPI.update({
+        reminderEnabled: form.enabled ? 'true' : 'false',
+        reminderLanguage: form.language,
+        reminderDaysBefore: String(form.daysBefore),
+        reminderMessageEn: form.templateEn,
+        reminderMessageAr: form.templateAr,
+      });
+      toast.success('Reminder settings saved');
+      fetchSettings();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to save reminder settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetTemplate = (lang) => {
+    if (lang === 'en') {
+      setForm((prev) => ({ ...prev, templateEn: defaults.templateEn }));
+    } else {
+      setForm((prev) => ({ ...prev, templateAr: defaults.templateAr }));
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--primary-600)' }} />
+      </div>
+    );
+  }
+
+  const placeholders = [
+    { key: '{patientName}', desc: 'Patient first name' },
+    { key: '{date}', desc: 'Appointment date' },
+    { key: '{time}', desc: 'Appointment time' },
+    { key: '{duration}', desc: 'Duration in minutes' },
+    { key: '{doctorName}', desc: "Doctor's name" },
+    { key: '{reason}', desc: 'Appointment reason' },
+    { key: '{reasonLine}', desc: 'Reason line (with label) — empty if no reason' },
+    { key: '{clinicName}', desc: 'Clinic name' },
+  ];
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* Enable / Language / Days Before */}
+      <div className="card p-5">
+        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-body)' }}>Reminder Configuration</h2>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          Configure automatic WhatsApp appointment reminders. Changes take effect on the next scheduled run.
+        </p>
+
+        <div className="space-y-4">
+          {/* Enable Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl border" style={{
+            backgroundColor: 'var(--surface-alt)',
+            borderColor: 'var(--border)',
+          }}>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg" style={{
+                backgroundColor: form.enabled ? '#DCFCE7' : '#F3F4F6',
+                color: form.enabled ? '#059669' : '#9CA3AF',
+              }}>
+                <Bell className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-medium" style={{ color: 'var(--text-body)' }}>Auto Reminders</p>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {form.enabled
+                    ? 'Reminders will be sent automatically on the cron schedule.'
+                    : 'No automatic reminders will be sent.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setForm((prev) => ({ ...prev, enabled: !prev.enabled }))}
+              className="toggle shrink-0"
+              data-checked={form.enabled ? 'true' : 'false'}
+              role="switch"
+              aria-checked={form.enabled}
+            >
+              <span className="toggle-thumb" />
+            </button>
+          </div>
+
+          {/* Language Selector */}
+          <div>
+            <label className="label mb-2 block">Reminder Language</label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, language: 'en' }))}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all ${
+                  form.language === 'en'
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <Globe className="w-4 h-4" />
+                <span className="font-medium text-sm">English</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, language: 'ar' }))}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all ${
+                  form.language === 'ar'
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <Globe className="w-4 h-4" />
+                <span className="font-medium text-sm">العربية (Arabic)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Days Before */}
+          <div>
+            <label className="label block mb-1">Send Reminder (days before appointment)</label>
+            <input
+              type="number"
+              min="1"
+              max="30"
+              className="input w-32"
+              value={form.daysBefore}
+              onChange={(e) => setForm((prev) => ({ ...prev, daysBefore: Math.max(1, parseInt(e.target.value) || 1) }))}
+            />
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              Reminders will be sent this many days before the appointment date.
+            </p>
+          </div>
+
+          {/* Save Button */}
+          <div className="pt-2">
+            <button onClick={handleSave} disabled={saving} className="btn-primary">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {saving ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* English Message Template */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-body)' }}>English Message Template</h2>
+          <button
+            onClick={() => resetTemplate('en')}
+            className="btn-sm btn-secondary"
+            title="Reset to default"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Reset
+          </button>
+        </div>
+        <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
+          This message is sent when the language is set to English.
+        </p>
+
+        {/* Placeholder hints */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {placeholders.map((p) => (
+            <span
+              key={p.key}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono cursor-pointer hover:bg-primary-100 transition-colors"
+              style={{ backgroundColor: 'var(--gray-100)', color: 'var(--primary-700)' }}
+              onClick={() => {
+                navigator.clipboard?.writeText(p.key);
+                toast.success(`Copied ${p.key}`);
+              }}
+              title={p.desc}
+            >
+              {p.key}
+            </span>
+          ))}
+        </div>
+
+        <textarea
+          className="input w-full font-mono text-sm"
+          rows={14}
+          value={form.templateEn}
+          onChange={(e) => setForm((prev) => ({ ...prev, templateEn: e.target.value }))}
+          placeholder={defaults.templateEn}
+        />
+      </div>
+
+      {/* Arabic Message Template */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-body)' }}>Arabic Message Template (قالب الرسالة بالعربية)</h2>
+          <button
+            onClick={() => resetTemplate('ar')}
+            className="btn-sm btn-secondary"
+            title="إعادة تعيين إلى الإعداد الافتراضي"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Reset
+          </button>
+        </div>
+        <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
+          تُرسل هذه الرسالة عندما تكون اللغة مضبوطة على العربية.
+        </p>
+
+        {/* Placeholder hints */}
+        <div className="flex flex-wrap gap-1.5 mb-3" dir="ltr">
+          {placeholders.map((p) => (
+            <span
+              key={p.key}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono cursor-pointer hover:bg-primary-100 transition-colors"
+              style={{ backgroundColor: 'var(--gray-100)', color: 'var(--primary-700)' }}
+              onClick={() => {
+                navigator.clipboard?.writeText(p.key);
+                toast.success(`Copied ${p.key}`);
+              }}
+              title={p.desc}
+            >
+              {p.key}
+            </span>
+          ))}
+        </div>
+
+        <textarea
+          className="input w-full font-mono text-sm"
+          rows={14}
+          value={form.templateAr}
+          onChange={(e) => setForm((prev) => ({ ...prev, templateAr: e.target.value }))}
+          placeholder={defaults.templateAr}
+          style={{ direction: 'rtl' }}
+        />
       </div>
     </div>
   );
