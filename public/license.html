@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Activation — Doctor Clinic</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #e2e8f0;
+    }
+    .container {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 24px;
+      padding: 48px;
+      max-width: 560px;
+      width: 90%;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo svg {
+      width: 56px;
+      height: 56px;
+      color: #3b82f6;
+    }
+    .logo h1 {
+      margin-top: 16px;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .logo p {
+      margin-top: 8px;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    .section {
+      margin-top: 32px;
+    }
+    .section h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .hardware-id {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      color: #60a5fa;
+      word-break: break-all;
+      user-select: all;
+      cursor: text;
+      position: relative;
+    }
+    .hardware-id:hover {
+      border-color: #3b82f6;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #334155;
+      border: none;
+      color: #94a3b8;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover {
+      background: #3b82f6;
+      color: white;
+    }
+    .copy-btn.copied {
+      background: #22c55e;
+      color: white;
+    }
+    .steps {
+      list-style: none;
+      counter-reset: step;
+    }
+    .steps li {
+      counter-increment: step;
+      padding: 12px 16px;
+      padding-left: 48px;
+      position: relative;
+      color: #cbd5e1;
+      font-size: 14px;
+      line-height: 1.6;
+      border-left: 2px solid #334155;
+      margin-left: 12px;
+    }
+    .steps li:last-child {
+      border-left-color: transparent;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: -12px;
+      top: 10px;
+      width: 26px;
+      height: 26px;
+      background: #3b82f6;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: white;
+    }
+    .steps li strong {
+      color: #f1f5f9;
+    }
+    .upload-area {
+      margin-top: 24px;
+      border: 2px dashed #334155;
+      border-radius: 16px;
+      padding: 40px 24px;
+      text-align: center;
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+    .upload-area:hover,
+    .upload-area.dragover {
+      border-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.05);
+    }
+    .upload-area svg {
+      width: 48px;
+      height: 48px;
+      color: #64748b;
+      margin-bottom: 16px;
+    }
+    .upload-area h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .upload-area p {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    .upload-area input[type="file"] {
+      display: none;
+    }
+    .status {
+      margin-top: 24px;
+      padding: 16px;
+      border-radius: 12px;
+      display: none;
+    }
+    .status.success {
+      display: block;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid #22c55e;
+      color: #4ade80;
+    }
+    .status.error {
+      display: block;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid #ef4444;
+      color: #f87171;
+    }
+    .status.loading {
+      display: block;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid #3b82f6;
+      color: #60a5fa;
+    }
+    .status .status-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .auto-reload {
+      margin-top: 16px;
+      font-size: 13px;
+      color: #64748b;
+      text-align: center;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid #334155;
+      text-align: center;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342" />
+      </svg>
+      <h1>Doctor Clinic Portable</h1>
+      <p>License Activation</p>
+    </div>
+
+    <div id="status-container">
+      <div class="section">
+        <h2>Your Hardware ID</h2>
+        <div class="hardware-id" id="hardware-id">
+          Loading...
+          <button class="copy-btn" id="copy-btn" onclick="copyHardwareId()">Copy</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>How to Activate</h2>
+        <ol class="steps">
+          <li>Send the <strong>Hardware ID</strong> above to your software provider</li>
+          <li>You will receive a <strong>.lic license file</strong> in return</li>
+          <li>Upload the <strong>.lic file</strong> below to activate</li>
+        </ol>
+      </div>
+
+      <div class="upload-area" id="upload-area">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+        </svg>
+        <h3>Upload License File</h3>
+        <p>Click to select or drag your .lic file here</p>
+        <input type="file" id="file-input" accept=".lic">
+      </div>
+
+      <div id="status" class="status"></div>
+      <div class="auto-reload" id="auto-reload" style="display:none;">
+        Redirecting to application...
+      </div>
+    </div>
+
+    <div class="footer">
+      Doctor Clinic Management System &mdash; Portable Edition
+    </div>
+  </div>
+
+  <script>
+    async function loadHardwareId() {
+      try {
+        const res = await fetch('/api/license/status');
+        const data = await res.json();
+        document.getElementById('hardware-id').innerHTML =
+          data.hardwareId +
+          '<button class="copy-btn" id="copy-btn" onclick="copyHardwareId()">Copy</button>';
+        
+        // If already activated, show success
+        if (data.activated && data.valid) {
+          showStatus('success', '✓ License Active', 
+            'Your license is valid and active. Expires: ' + new Date(data.expiresAt).toLocaleDateString());
+          document.getElementById('upload-area').style.display = 'none';
+        }
+      } catch (err) {
+        document.getElementById('hardware-id').innerHTML =
+          'Could not read hardware ID. Is the server running?' +
+          '<button class="copy-btn" id="copy-btn" onclick="copyHardwareId()">Copy</button>';
+      }
+    }
+
+    function copyHardwareId() {
+      const el = document.getElementById('hardware-id');
+      const text = el.textContent.replace('Copy', '').trim();
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copy-btn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    function showStatus(type, title, message) {
+      const el = document.getElementById('status');
+      el.className = 'status ' + type;
+      const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : '⏳';
+      el.innerHTML = '<div class="status-icon">' + icon + '</div><strong>' + title + '</strong><br>' + message;
+    }
+
+    async function uploadLicense(file) {
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const content = e.target.result;
+        showStatus('loading', '⏳ Activating...', 'Please wait while we verify your license.');
+        
+        try {
+          const res = await fetch('/api/license/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ license: content }),
+          });
+          const data = await res.json();
+          
+          if (data.success) {
+            showStatus('success', '✓ Activation Successful!', data.message);
+            document.getElementById('upload-area').style.display = 'none';
+            
+            // Show auto-reload message
+            const reloadMsg = document.getElementById('auto-reload');
+            reloadMsg.style.display = 'block';
+            reloadMsg.textContent = 'Redirecting to application in 3 seconds...';
+            
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 3000);
+          } else {
+            showStatus('error', '✗ Activation Failed', data.message);
+          }
+        } catch (err) {
+          showStatus('error', '✗ Connection Error', 'Could not reach the server. Please make sure the application is running.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Upload area click
+    document.getElementById('upload-area').addEventListener('click', function() {
+      document.getElementById('file-input').click();
+    });
+
+    // File input change
+    document.getElementById('file-input').addEventListener('change', function(e) {
+      if (e.target.files.length > 0) {
+        uploadLicense(e.target.files[0]);
+      }
+    });
+
+    // Drag & drop
+    const uploadArea = document.getElementById('upload-area');
+    uploadArea.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      this.classList.add('dragover');
+    });
+    uploadArea.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      this.classList.remove('dragover');
+    });
+    uploadArea.addEventListener('drop', function(e) {
+      e.preventDefault();
+      this.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        uploadLicense(e.dataTransfer.files[0]);
+      }
+    });
+
+    // Load hardware ID on page load
+    loadHardwareId();
+  </script>
+</body>
+</html>

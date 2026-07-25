@@ -6,66 +6,53 @@ const cors = require('cors');
 const morgan = require('morgan');
 const { PrismaClient } = require('@prisma/client');
 
-const authRoutes = require('./routes/auth.routes');
-const doctorRoutes = require('./routes/doctor.routes');
-const patientRoutes = require('./routes/patient.routes');
-const appointmentRoutes = require('./routes/appointment.routes');
-const scheduleRoutes = require('./routes/schedule.routes');
-const medicalRecordRoutes = require('./routes/medicalRecord.routes');
-const medicationRoutes = require('./routes/medication.routes');
-const prescriptionRoutes = require('./routes/prescription.routes');
-const departmentRoutes = require('./routes/department.routes');
-const invoiceRoutes = require('./routes/invoice.routes');
-const installmentRoutes = require('./routes/installment.routes');
-const dashboardRoutes = require('./routes/dashboard.routes');
-const medicalTestRoutes = require('./routes/medicalTest.routes');
-const reminderRoutes = require('./routes/reminder.routes');
-const settingRoutes = require('./routes/setting.routes');
-const backupRoutes = require('./routes/backup.routes');
-const whatsappRoutes = require('./routes/whatsapp.routes');
-const { startReminderScheduler, stopReminderScheduler } = require('./services/reminder.service');
+const authRoutes = require('./src/routes/auth.routes');
+const doctorRoutes = require('./src/routes/doctor.routes');
+const patientRoutes = require('./src/routes/patient.routes');
+const appointmentRoutes = require('./src/routes/appointment.routes');
+const scheduleRoutes = require('./src/routes/schedule.routes');
+const medicalRecordRoutes = require('./src/routes/medicalRecord.routes');
+const medicationRoutes = require('./src/routes/medication.routes');
+const prescriptionRoutes = require('./src/routes/prescription.routes');
+const departmentRoutes = require('./src/routes/department.routes');
+const invoiceRoutes = require('./src/routes/invoice.routes');
+const installmentRoutes = require('./src/routes/installment.routes');
+const dashboardRoutes = require('./src/routes/dashboard.routes');
+const medicalTestRoutes = require('./src/routes/medicalTest.routes');
+const reminderRoutes = require('./src/routes/reminder.routes');
+const settingRoutes = require('./src/routes/setting.routes');
+const backupRoutes = require('./src/routes/backup.routes');
+const whatsappRoutes = require('./src/routes/whatsapp.routes');
+const { startReminderScheduler, stopReminderScheduler } = require('./src/services/reminder.service');
 
-const { errorHandler, notFound } = require('./middleware/error.middleware');
+const { errorHandler, notFound } = require('./src/middleware/error.middleware');
 
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
-// ─── Derive DB path from DATABASE_URL ──────────────────────────────────────
+// ─── Derive DB path from shared utility ─────────────────────────────────
 
-function getDbPath() {
-  const url = process.env.DATABASE_URL || 'file:./prisma/dev.db';
-  // Parse SQLite connection string: "file:./prisma/dev.db" or "file:/absolute/path"
-  const match = url.match(/^file:(.+)$/);
-  if (match) {
-    const filePath = match[1];
-    if (path.isAbsolute(filePath)) return filePath;
-    return path.resolve(__dirname, '..', filePath);
-  }
-  return path.join(__dirname, '../prisma/dev.db');
-}
+const { getDbPath } = require('./src/utils/dbPath');
 
 const DB_PATH = getDbPath();
-const BACKUPS_DIR = path.join(__dirname, '../uploads/backups');
+console.log('[DB] Database path:', DB_PATH);
+const BACKUPS_DIR = path.join(__dirname, 'uploads/backups');
 
 // ─── Crash-Safe Database Setup + Startup ────────────────────────────────────
 
 async function initializeDatabase() {
   try {
-    // Enable WAL mode for crash-safe writes and better concurrent reads
     await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL');
   } catch (e) {
-    // PRAGMA queries may fail on some Node.js/Prisma version combos — non-critical
     console.warn('[DB] Could not set WAL mode (non-critical):', e.message);
   }
   try {
-    // Full synchronous mode ensures data is fully flushed to disk before acknowledging
     await prisma.$queryRawUnsafe('PRAGMA synchronous=FULL');
   } catch (e) {
     console.warn('[DB] Could not set synchronous mode (non-critical):', e.message);
   }
   try {
-    // Enable foreign keys (enforced by Prisma but belt-and-suspenders)
     await prisma.$queryRawUnsafe('PRAGMA foreign_keys=ON');
   } catch (e) {
     console.warn('[DB] Could not set foreign_keys (non-critical):', e.message);
@@ -164,7 +151,7 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 
 // Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -172,7 +159,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Serve built frontend in production
-const frontendDist = path.join(__dirname, '../../frontend/dist');
+const frontendDist = path.join(__dirname, '../frontend/dist');
 console.log('Frontend dist path:', frontendDist);
 console.log('Frontend dist exists:', fs.existsSync(frontendDist));
 if (fs.existsSync(frontendDist)) {

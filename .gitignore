@@ -37,7 +37,12 @@ prisma/dev.db
 prisma/dev.db-journal
 **/prisma/dev.db
 **/prisma/dev.db-journal
+**/prisma/dev.db-wal
+**/prisma/dev.db-shm
 **/prisma/prisma/
+
+# Runtime data
+Portable/backend/data/
 
 # Uploads
 uploads/

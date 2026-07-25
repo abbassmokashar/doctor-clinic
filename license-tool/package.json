@@ -1,0 +1,14 @@
+{
+  "name": "license-tool",
+  "version": "1.0.0",
+  "private": true,
+  "description": "License generation tools for Doctor Clinic Portable",
+  "scripts": {
+    "generate-keys": "node generate-keys.js",
+    "create-license": "node create-license.js"
+  },
+  "devDependencies": {
+    "archiver": "^8.0.0",
+    "javascript-obfuscator": "^5.4.7"
+  }
+}
