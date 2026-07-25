@@ -12,7 +12,6 @@
  */
 
 const path = require('path');
-const fs = require('fs');
 
 // Anchor: dbPath.js lives at Portable/backend/src/utils/dbPath.js
 // Project root = two levels up → Portable/backend/
